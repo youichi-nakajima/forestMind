@@ -34,6 +34,7 @@ export const App: React.FC = () => {
     canUndo,
     canRedo,
     loadMapFromXml,
+    importMarkdown,
     resetToDefault,
     exportXml,
     exportMarkdown,
@@ -111,6 +112,7 @@ export const App: React.FC = () => {
         onResetZoom={handleResetZoom}
         zoomPercent={zoomScale * 100}
         onImportXml={loadMapFromXml}
+        onImportMarkdown={importMarkdown}
         onExportXml={handleExport}
         onExportMarkdown={handleExportMarkdown}
         onUnfoldAll={unfoldAll}

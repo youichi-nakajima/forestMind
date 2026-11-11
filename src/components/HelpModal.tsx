@@ -87,3 +87,4 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
     </div>
   );
 };
+

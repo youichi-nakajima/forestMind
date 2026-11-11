@@ -420,6 +420,96 @@ export function useMindMap() {
     return serializeFreeMindXml(map);
   }, [map]);
 
+  const importMarkdown = useCallback(
+    (markdownText: string, asNewTab: boolean = true) => {
+      const lines = markdownText.split(/\r?\n/).filter(line => line.trim() !== '');
+      if (lines.length === 0) return;
+
+      let rootTitle = '新規マインドマップ';
+      const rootChildren: FreeMindNode[] = [];
+      const stack: { node: FreeMindNode; indent: number }[] = [];
+
+      lines.forEach((rawLine, idx) => {
+        const headingMatch = rawLine.match(/^#+\s+(.+)$/);
+        const bulletMatch = rawLine.match(/^(\s*)[-*+]\s+(.+)$/);
+
+        if (idx === 0 && headingMatch) {
+          rootTitle = headingMatch[1].trim();
+          return;
+        }
+
+        let indent = 0;
+        let text = rawLine.trim();
+
+        if (bulletMatch) {
+          indent = bulletMatch[1].length;
+          text = bulletMatch[2].trim();
+        } else if (headingMatch) {
+          const hashes = rawLine.match(/^#+/)?.[0].length || 1;
+          indent = (hashes - 1) * 2;
+          text = headingMatch[1].trim();
+        }
+
+        const newNode: FreeMindNode = {
+          id: generateNodeId(),
+          text,
+          style: 'fork',
+          icons: [],
+          attributes: [],
+          arrowLinks: [],
+          hooks: [],
+          children: [],
+          created: Date.now(),
+          modified: Date.now(),
+        };
+
+        if (stack.length === 0) {
+          newNode.position = rootChildren.length % 2 === 0 ? 'right' : 'left';
+          rootChildren.push(newNode);
+          stack.push({ node: newNode, indent });
+        } else {
+          while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+            stack.pop();
+          }
+
+          if (stack.length === 0) {
+            newNode.position = rootChildren.length % 2 === 0 ? 'right' : 'left';
+            rootChildren.push(newNode);
+            stack.push({ node: newNode, indent });
+          } else {
+            const parent = stack[stack.length - 1].node;
+            newNode.position = parent.position;
+            parent.children.push(newNode);
+            stack.push({ node: newNode, indent });
+          }
+        }
+      });
+
+      const newMap: FreeMindMap = {
+        version: '1.0.1',
+        root: {
+          id: generateNodeId(),
+          text: rootTitle,
+          style: 'bubble',
+          font: { size: 16, bold: true },
+          icons: [],
+          attributes: [],
+          arrowLinks: [],
+          hooks: [],
+          children: rootChildren,
+        },
+      };
+
+      if (asNewTab) {
+        createNewTab(newMap, rootTitle);
+      } else {
+        pushHistory(newMap);
+        setSelectedNodeId(newMap.root.id);
+      }
+    },
+    [createNewTab, pushHistory, setSelectedNodeId]
+  );
+
   const exportMarkdown = useCallback(() => {
     const lines: string[] = [];
     function traverse(node: FreeMindNode, depth: number) {
@@ -515,6 +605,7 @@ export function useMindMap() {
     canUndo: activeTab.past.length > 0,
     canRedo: activeTab.future.length > 0,
     loadMapFromXml,
+    importMarkdown,
     resetToDefault,
     exportXml,
     exportMarkdown,

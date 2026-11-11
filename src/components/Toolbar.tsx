@@ -33,6 +33,7 @@ interface ToolbarProps {
   onResetZoom: () => void;
   zoomPercent: number;
   onImportXml: (xml: string) => void;
+  onImportMarkdown: (md: string) => void;
   onExportXml: () => void;
   onExportMarkdown: () => void;
   onUnfoldAll: () => void;
@@ -62,6 +63,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onResetZoom,
   zoomPercent,
   onImportXml,
+  onImportMarkdown,
   onExportXml,
   onExportMarkdown,
   onUnfoldAll,
@@ -85,11 +87,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const fileName = file.name.toLowerCase();
     const reader = new FileReader();
     reader.onload = ev => {
       const content = ev.target?.result as string;
       if (content) {
-        onImportXml(content);
+        if (fileName.endsWith('.md') || fileName.endsWith('.txt')) {
+          onImportMarkdown(content);
+        } else {
+          onImportXml(content);
+        }
       }
     };
     reader.readAsText(file);
@@ -111,17 +118,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <input
           type="file"
           ref={fileInputRef}
-          accept=".mm,.xml"
+          accept=".mm,.xml,.md,.txt"
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
         <button
           className="toolbar-btn"
-          title="FreeMind (.mm) ファイルを開く (新しいタブで開きます)"
+          title="FreeMind (.mm) または Markdown (.md) ファイルを開く"
           onClick={() => fileInputRef.current?.click()}
         >
           <FolderOpen size={16} />
-          <span>開く (.mm)</span>
+          <span>開く (.mm / .md)</span>
         </button>
 
         <div className="export-dropdown-wrapper">

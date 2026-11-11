@@ -5,6 +5,7 @@ import { Toolbar } from './components/Toolbar';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { NodePropertiesPanel } from './components/NodePropertiesPanel';
 import { ForestOverview } from './components/ForestOverview';
+import { HelpModal } from './components/HelpModal';
 import { FreeMindNode } from './types/freemind';
 
 export const App: React.FC = () => {
@@ -24,6 +25,8 @@ export const App: React.FC = () => {
     deleteNode,
     updateNodeText,
     toggleFold,
+    unfoldAll,
+    foldAll,
     updateNodeProperties,
     moveNode,
     undo,
@@ -33,6 +36,7 @@ export const App: React.FC = () => {
     loadMapFromXml,
     resetToDefault,
     exportXml,
+    exportMarkdown,
     searchQuery,
     setSearchQuery,
     searchIndex,
@@ -45,6 +49,7 @@ export const App: React.FC = () => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(true);
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Find currently selected node object
   const selectedNode = useMemo(() => {
@@ -65,11 +70,25 @@ export const App: React.FC = () => {
   // Export .mm file download
   const handleExport = () => {
     const xml = exportXml();
-    const blob = new Blob([xml], { type: 'application/x-freemind' });
+    const blob = new Blob([xml], { type: 'application/x-freemind;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${map.root.text || 'mindmap'}.mm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Export Markdown (.md) download
+  const handleExportMarkdown = () => {
+    const md = exportMarkdown();
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${map.root.text || 'mindmap'}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -93,6 +112,10 @@ export const App: React.FC = () => {
         zoomPercent={zoomScale * 100}
         onImportXml={loadMapFromXml}
         onExportXml={handleExport}
+        onExportMarkdown={handleExportMarkdown}
+        onUnfoldAll={unfoldAll}
+        onFoldAll={foldAll}
+        onOpenHelp={() => setIsHelpOpen(true)}
         onResetToDefault={resetToDefault}
         selectedNodeId={selectedNodeId}
         isRootSelected={isRootSelected}
@@ -198,6 +221,9 @@ export const App: React.FC = () => {
           <span className="shortcut-chip"><kbd>Ctrl+Z / Y</kbd>Undo/Redo</span>
         </div>
       </footer>
+
+      {/* Help Modal */}
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </div>
   );
 };

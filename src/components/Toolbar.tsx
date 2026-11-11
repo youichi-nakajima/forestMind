@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   FolderOpen,
   Download,
@@ -14,6 +14,10 @@ import {
   Search,
   ChevronUp,
   ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
+  HelpCircle,
+  FileText,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -30,6 +34,10 @@ interface ToolbarProps {
   zoomPercent: number;
   onImportXml: (xml: string) => void;
   onExportXml: () => void;
+  onExportMarkdown: () => void;
+  onUnfoldAll: () => void;
+  onFoldAll: () => void;
+  onOpenHelp: () => void;
   onResetToDefault: () => void;
   selectedNodeId: string | null;
   isRootSelected: boolean;
@@ -55,6 +63,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   zoomPercent,
   onImportXml,
   onExportXml,
+  onExportMarkdown,
+  onUnfoldAll,
+  onFoldAll,
+  onOpenHelp,
   onResetToDefault,
   selectedNodeId,
   isRootSelected,
@@ -67,6 +79,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,14 +123,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <FolderOpen size={16} />
           <span>開く (.mm)</span>
         </button>
-        <button
-          className="toolbar-btn"
-          title="現在のマップを FreeMind (.mm) として保存"
-          onClick={onExportXml}
-        >
-          <Download size={16} />
-          <span>保存</span>
-        </button>
+
+        <div className="export-dropdown-wrapper">
+          <button
+            className="toolbar-btn"
+            title="エクスポート形式を選択"
+            onClick={() => setShowExportMenu(prev => !prev)}
+          >
+            <Download size={16} />
+            <span>保存 / 出力 ▾</span>
+          </button>
+          {showExportMenu && (
+            <div className="export-menu" onClick={() => setShowExportMenu(false)}>
+              <button className="export-menu-item" onClick={onExportXml}>
+                <Download size={14} />
+                <div>
+                  <strong>FreeMind (.mm)</strong>
+                  <p>完全互換XML形式</p>
+                </div>
+              </button>
+              <button className="export-menu-item" onClick={onExportMarkdown}>
+                <FileText size={14} />
+                <div>
+                  <strong>Markdown (.md)</strong>
+                  <p>箇条書きアウトライン形式</p>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="toolbar-divider" />
@@ -150,6 +184,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <Trash2 size={16} />
           <span>削除</span>
+        </button>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      {/* Fold / Unfold All */}
+      <div className="toolbar-group">
+        <button
+          className="toolbar-btn icon-only"
+          title="すべてのノードを展開"
+          onClick={onUnfoldAll}
+        >
+          <ChevronsDown size={16} />
+        </button>
+        <button
+          className="toolbar-btn icon-only"
+          title="ルート以外をすべて折りたたむ"
+          onClick={onFoldAll}
+        >
+          <ChevronsUp size={16} />
         </button>
       </div>
 
@@ -242,10 +296,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="toolbar-divider" />
 
-      {/* Reset to sample */}
+      {/* Help & Sample Reset */}
       <div className="toolbar-group">
         <button
-          className="toolbar-btn secondary"
+          className="toolbar-btn icon-only"
+          title="ショートカット操作ガイド"
+          onClick={onOpenHelp}
+        >
+          <HelpCircle size={16} />
+        </button>
+        <button
+          className="toolbar-btn icon-only secondary"
           title="初期サンプルマップを復元"
           onClick={() => {
             if (confirm('現在のマップ内容を初期サンプルマップで上書きしますか？')) {

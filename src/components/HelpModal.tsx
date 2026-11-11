@@ -1,0 +1,89 @@
+import React from 'react';
+import { X, Keyboard, Sparkles } from 'lucide-react';
+
+interface HelpModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const SHORTCUT_GROUPS = [
+  {
+    category: 'ノード作成・編集',
+    items: [
+      { key: 'Tab / Insert', desc: '子ノードを追加' },
+      { key: 'Enter', desc: '兄弟ノードを追加' },
+      { key: 'F2 / ダブルクリック', desc: 'インラインテキスト編集' },
+      { key: 'Delete / Backspace', desc: '選択ノードを削除' },
+      { key: 'ドラッグ＆ドロップ', desc: 'ノードを別の親ノードへ移動・並び替え' },
+    ],
+  },
+  {
+    category: 'ナビゲーション & 開閉',
+    items: [
+      { key: '↑ / ↓', desc: '兄弟ノード間を移動' },
+      { key: '→', desc: '右の子ノードへ移動（左ブランチ時は親へ）' },
+      { key: '←', desc: '左の子ノードへ移動（右ブランチ時は親へ）' },
+      { key: 'Space / ○アイコン', desc: 'ノードの展開 / 折りたたみを切り替え' },
+      { key: 'ドラッグ (背景)', desc: 'キャンバスをスクロール・移動' },
+      { key: 'マウスホイール', desc: 'キャンバスを拡大 / 縮小' },
+    ],
+  },
+  {
+    category: '履歴 & 検索',
+    items: [
+      { key: 'Ctrl + Z', desc: '元に戻す (Undo)' },
+      { key: 'Ctrl + Y', desc: 'やり直し (Redo)' },
+      { key: 'Ctrl + F', desc: 'マップ内検索バーにフォーカス' },
+      { key: 'Enter (検索中)', desc: '次の一致ノードへジャンプ' },
+      { key: 'Shift + Enter', desc: '前の一致ノードへジャンプ' },
+    ],
+  },
+];
+
+export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title-group">
+            <Keyboard size={20} className="modal-icon" />
+            <h3>キーボードショートカット & 操作ガイド</h3>
+          </div>
+          <button className="panel-close-btn" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="shortcuts-grid">
+            {SHORTCUT_GROUPS.map((group, idx) => (
+              <div key={idx} className="shortcut-group-card">
+                <h4>{group.category}</h4>
+                <div className="shortcut-list">
+                  {group.items.map((item, i) => (
+                    <div key={i} className="shortcut-row">
+                      <kbd>{item.key}</kbd>
+                      <span>{item.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="help-tip-box">
+            <Sparkles size={16} />
+            <div>
+              <strong>FreeMind 1.0.1 互換について:</strong>
+              <p>
+                「保存」でダウンロードされる <code>.mm</code> ファイルは、本家 FreeMind と同じく非ASCII文字を 16進数数値文字参照（<code>&amp;#xXXXX;</code>）で出力するため、既存の FreeMind や Freeplane でも文字化けなくそのまま開くことができます。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -320,6 +320,30 @@ export function useMindMap() {
     [updateTree]
   );
 
+  const unfoldAll = useCallback(() => {
+    updateTree(root => {
+      function setFold(n: FreeMindNode) {
+        n.folded = false;
+        for (const c of n.children) setFold(c);
+      }
+      setFold(root);
+      return true;
+    });
+  }, [updateTree]);
+
+  const foldAll = useCallback(() => {
+    updateTree(root => {
+      function setFold(n: FreeMindNode) {
+        if (n !== root && n.children.length > 0) {
+          n.folded = true;
+        }
+        for (const c of n.children) setFold(c);
+      }
+      setFold(root);
+      return true;
+    });
+  }, [updateTree]);
+
   const updateNodeProperties = useCallback(
     (nodeId: string, patch: Partial<FreeMindNode>) => {
       updateTree(root => {
@@ -396,6 +420,34 @@ export function useMindMap() {
     return serializeFreeMindXml(map);
   }, [map]);
 
+  const exportMarkdown = useCallback(() => {
+    const lines: string[] = [];
+    function traverse(node: FreeMindNode, depth: number) {
+      const indent = '  '.repeat(depth);
+      const text = node.text || (node.htmlContent ? node.htmlContent.replace(/<[^>]+>/g, '').trim() : 'Node');
+      
+      if (depth === 0) {
+        lines.push(`# ${text}\n`);
+      } else {
+        lines.push(`${indent}- ${text}`);
+      }
+
+      if (node.noteHtml) {
+        const plainNote = node.noteHtml.replace(/<[^>]+>/g, '').trim();
+        if (plainNote) {
+          lines.push(`${indent}  > ${plainNote}`);
+        }
+      }
+
+      for (const child of node.children) {
+        traverse(child, depth + 1);
+      }
+    }
+
+    traverse(map.root, 0);
+    return lines.join('\n');
+  }, [map]);
+
   // Search matches calculation
   const searchResults = useCallback(() => {
     if (!searchQuery.trim()) return [];
@@ -454,6 +506,8 @@ export function useMindMap() {
     deleteNode,
     updateNodeText,
     toggleFold,
+    unfoldAll,
+    foldAll,
     updateNodeProperties,
     moveNode,
     undo,
@@ -463,6 +517,7 @@ export function useMindMap() {
     loadMapFromXml,
     resetToDefault,
     exportXml,
+    exportMarkdown,
     searchQuery,
     setSearchQuery,
     searchIndex,

@@ -197,7 +197,7 @@ src/
 
 - [React 19](https://react.dev/) / [TypeScript 5.7](https://www.typescriptlang.org/)
 - [Vite 6](https://vite.dev/)（ビルド・開発サーバー）
-- [Vitest 3](https://vitest.dev/) + [happy-dom](https://github.com/capricorn86/happy-dom)（テスト）
+- [Vitest 5](https://vitest.dev/) + [happy-dom](https://github.com/capricorn86/happy-dom)（テスト）
 - [ESLint 9](https://eslint.org/) + typescript-eslint + eslint-plugin-react-hooks（静的解析）
 - [lucide-react](https://lucide.dev/)（アイコン）
 - Web Audio API（効果音）、File System Access API（フォルダ検索）

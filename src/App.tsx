@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useMindMap } from './hooks/useMindMap';
+import { usePresentationPlayback } from './hooks/usePresentationPlayback';
 import { TabBar } from './components/TabBar';
 import { Toolbar } from './components/Toolbar';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { NodePropertiesPanel } from './components/NodePropertiesPanel';
+import { PresentationControls } from './components/PresentationControls';
 import { ForestOverview } from './components/ForestOverview';
 import { HelpModal } from './components/HelpModal';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
@@ -54,6 +56,63 @@ export const App: React.FC = () => {
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
+
+  // Presentation Playback Hook
+  const {
+    isActive: isPresentationActive,
+    isPlaying: isPresentationPlaying,
+    mode: presentationMode,
+    setMode: setPresentationMode,
+    speed: presentationSpeed,
+    setSpeed: setPresentationSpeed,
+    autoCenter,
+    setAutoCenter,
+    currentStepIndex,
+    steps: presentationSteps,
+    currentStep: activePresentationStep,
+    visibleNodeIds: presentationVisibleNodeIds,
+    activeNodeId: presentationActiveNodeId,
+    startPresentation,
+    stopPresentation,
+    togglePlay: togglePresentationPlay,
+    nextStep: nextPresentationStep,
+    prevStep: prevPresentationStep,
+    goToStep: goToPresentationStep,
+  } = usePresentationPlayback({
+    rootNode: map.root,
+    onActiveNodeChange: nodeId => {
+      setSelectedNodeId(nodeId);
+    },
+  });
+
+  // Toggle presentation via F5 or button
+  const handleTogglePresentation = () => {
+    if (isPresentationActive) {
+      stopPresentation();
+    } else {
+      setIsForestViewOpen(false);
+      startPresentation();
+    }
+  };
+
+  // Global F5 key listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F5') {
+        e.preventDefault();
+        handleTogglePresentation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPresentationActive]);
+
+  // Stop presentation on tab switch
+  useEffect(() => {
+    if (isPresentationActive) {
+      stopPresentation();
+    }
+  }, [activeTabId]);
 
   // Handler for jumping from FreeMindSearcher to map & node
   const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {
@@ -148,6 +207,8 @@ export const App: React.FC = () => {
         currentSearchIndex={searchIndex}
         onNextSearch={handleNextSearch}
         onPrevSearch={handlePrevSearch}
+        isPresentationActive={isPresentationActive}
+        onTogglePresentation={handleTogglePresentation}
       />
 
       {/* Multi-Map Tab Bar (forestMind Forest View feature) */}
@@ -192,7 +253,7 @@ export const App: React.FC = () => {
               selectedNodeId={selectedNodeId}
               setSelectedNodeId={id => {
                 setSelectedNodeId(id);
-                if (id && !isPropertiesOpen) {
+                if (id && !isPropertiesOpen && !isPresentationActive) {
                   setIsPropertiesOpen(true);
                 }
               }}
@@ -216,10 +277,36 @@ export const App: React.FC = () => {
                   setActiveTabId(targetTabId);
                 }
               }}
+              isPresentationActive={isPresentationActive}
+              visibleNodeIds={presentationVisibleNodeIds}
+              activeNodeId={presentationActiveNodeId}
+              autoCenter={autoCenter}
             />
 
+            {/* Presentation Floating Controls */}
+            {isPresentationActive && (
+              <PresentationControls
+                isPlaying={isPresentationPlaying}
+                onTogglePlay={togglePresentationPlay}
+                onNext={nextPresentationStep}
+                onPrev={prevPresentationStep}
+                onReset={() => goToPresentationStep(0)}
+                onClose={stopPresentation}
+                currentStepIndex={currentStepIndex}
+                totalSteps={presentationSteps.length}
+                currentStep={activePresentationStep}
+                mode={presentationMode}
+                onChangeMode={setPresentationMode}
+                speed={presentationSpeed}
+                onChangeSpeed={setPresentationSpeed}
+                autoCenter={autoCenter}
+                onToggleAutoCenter={() => setAutoCenter(c => !c)}
+                onSeek={goToPresentationStep}
+              />
+            )}
+
             {/* Side Properties Panel */}
-            {isPropertiesOpen && selectedNode && (
+            {!isPresentationActive && isPropertiesOpen && selectedNode && (
               <NodePropertiesPanel
                 node={selectedNode}
                 map={map}
@@ -242,6 +329,7 @@ export const App: React.FC = () => {
           <span className="shortcut-chip"><kbd>Del</kbd>削除</span>
           <span className="shortcut-chip"><kbd>ドラッグ＆ドロップ</kbd>階層移動</span>
           <span className="shortcut-chip"><kbd>Ctrl+Z / Y</kbd>Undo/Redo</span>
+          <span className="shortcut-chip highlight"><kbd>F5</kbd>思考再生</span>
         </div>
       </footer>
 

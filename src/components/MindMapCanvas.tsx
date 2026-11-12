@@ -23,6 +23,10 @@ interface MindMapCanvasProps {
   setPanOffset: (updater: (prev: { x: number; y: number }) => { x: number; y: number }) => void;
   searchMatchedIds?: string[];
   onNavigateTab?: (tabId: string) => void;
+  isPresentationActive?: boolean;
+  visibleNodeIds?: Set<string>;
+  activeNodeId?: string | null;
+  autoCenter?: boolean;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
@@ -45,6 +49,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   setPanOffset,
   searchMatchedIds = [],
   onNavigateTab,
+  isPresentationActive = false,
+  visibleNodeIds,
+  activeNodeId,
+  autoCenter = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -67,6 +75,28 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       }));
     }
   }, [panOffset.x, panOffset.y, setPanOffset]);
+
+  // Auto-center camera to active node during presentation
+  useEffect(() => {
+    if (!isPresentationActive || !autoCenter || !activeNodeId || !containerRef.current) {
+      return;
+    }
+
+    const targetNode = layoutNodes.get(activeNodeId);
+    if (!targetNode) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    const targetPanX = centerX - targetNode.x * zoomScale;
+    const targetPanY = centerY - targetNode.y * zoomScale;
+
+    setPanOffset(() => ({
+      x: targetPanX,
+      y: targetPanY,
+    }));
+  }, [isPresentationActive, autoCenter, activeNodeId, layoutNodes, zoomScale, setPanOffset]);
 
   // Sync editing text when editing starts
   useEffect(() => {
@@ -114,6 +144,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   // Global Keyboard Shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // In presentation mode, canvas editing shortcuts are disabled
+      if (isPresentationActive) {
+        return;
+      }
+
       if (editingNodeId) {
         // When editing an inline input, do not trigger navigation shortcuts
         return;
@@ -243,6 +278,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onRedo,
       setSelectedNodeId,
       setEditingNodeId,
+      isPresentationActive,
     ]
   );
 
@@ -268,7 +304,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onWheel={handleWheel}
     >
       <div
-        className="mindmap-viewport"
+        className={`mindmap-viewport ${isPresentationActive ? 'presentation-mode' : ''} ${
+          isPresentationActive && !isPanning ? 'smooth-transition' : ''
+        }`}
         style={{
           transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomScale})`,
           transformOrigin: '0 0',
@@ -291,57 +329,75 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           </defs>
 
           {/* Clouds */}
-          {clouds.map(c => (
-            <rect
-              key={c.id}
-              x={c.x}
-              y={c.y}
-              width={c.width}
-              height={c.height}
-              rx="18"
-              ry="18"
-              fill={c.color}
-              opacity="0.4"
-              stroke={c.color}
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
-            />
-          ))}
+          {clouds
+            .filter(c => !isPresentationActive || visibleNodeIds?.has(c.id))
+            .map(c => (
+              <rect
+                key={c.id}
+                x={c.x}
+                y={c.y}
+                width={c.width}
+                height={c.height}
+                rx="18"
+                ry="18"
+                fill={c.color}
+                opacity="0.4"
+                stroke={c.color}
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+              />
+            ))}
 
           {/* Branch Edges */}
-          {edges.map((edge: EdgePath) => (
-            <path
-              key={edge.id}
-              d={edge.d}
-              fill="none"
-              stroke={edge.color}
-              strokeWidth={edge.width}
-              strokeLinecap="round"
-              className="mindmap-edge"
-            />
-          ))}
+          {edges
+            .filter(
+              edge =>
+                !isPresentationActive ||
+                (visibleNodeIds?.has(edge.sourceId) && visibleNodeIds?.has(edge.targetId))
+            )
+            .map((edge: EdgePath) => (
+              <path
+                key={edge.id}
+                d={edge.d}
+                fill="none"
+                stroke={edge.color}
+                strokeWidth={edge.width}
+                strokeLinecap="round"
+                className="mindmap-edge"
+              />
+            ))}
 
           {/* FreeMind Arrow Links */}
-          {arrowLinks.map(al => (
-            <path
-              key={al.id}
-              d={al.d}
-              stroke={al.color}
-              strokeWidth="2"
-              strokeDasharray="5 4"
-              fill="none"
-              markerEnd="url(#arrow)"
-            />
-          ))}
+          {arrowLinks
+            .filter(
+              al =>
+                !isPresentationActive ||
+                (visibleNodeIds?.has(al.sourceId) && visibleNodeIds?.has(al.targetId))
+            )
+            .map(al => (
+              <path
+                key={al.id}
+                d={al.d}
+                stroke={al.color}
+                strokeWidth="2"
+                strokeDasharray="5 4"
+                fill="none"
+                markerEnd="url(#arrow)"
+              />
+            ))}
         </svg>
 
         {/* Nodes Layer */}
         <div className="mindmap-nodes-layer">
-          {Array.from(layoutNodes.values()).map((lNode: LayoutNode) => {
-            const isSelected = selectedNodeId === lNode.id;
-            const isSearchMatch = searchMatchedIds.includes(lNode.id);
-            const isEditing = editingNodeId === lNode.id;
-            const node = lNode.node;
+          {Array.from(layoutNodes.values())
+            .filter(lNode => !isPresentationActive || visibleNodeIds?.has(lNode.id))
+            .map((lNode: LayoutNode) => {
+              const isSelected = selectedNodeId === lNode.id;
+              const isSearchMatch = searchMatchedIds.includes(lNode.id);
+              const isEditing = editingNodeId === lNode.id;
+              const isPresentationActiveNode =
+                isPresentationActive && activeNodeId === lNode.id;
+              const node = lNode.node;
             const isRoot = lNode.side === 'root';
             const hasChildren = node.children.length > 0;
             const isBubble = node.style === 'bubble' || isRoot;
@@ -397,7 +453,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   isSelected ? 'selected' : ''
                 } ${isSearchMatch ? 'search-match' : ''} ${
                   dragOverNodeId === lNode.id ? 'drag-target' : ''
-                } ${isRoot ? 'root-node' : ''} side-${lNode.side}`}
+                } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${
+                  isPresentationActiveNode ? 'presentation-active-node' : ''
+                }`}
                 style={{
                   left: `${anchorLeft}px`,
                   top: `${lNode.y}px`,

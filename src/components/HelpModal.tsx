@@ -38,6 +38,17 @@ const SHORTCUT_GROUPS = [
       { key: 'Shift + Enter', desc: '前の一致ノードへジャンプ' },
     ],
   },
+  {
+    category: '思考再生 & プレゼンテーション',
+    items: [
+      { key: 'F5', desc: 'プレゼンテーション再生の開始 / 終了' },
+      { key: 'Space', desc: '再生 / 一時停止の切り替え' },
+      { key: '→ / ↓', desc: '次の思考ステップへ進む' },
+      { key: '← / ↑', desc: '前の思考ステップへ戻る' },
+      { key: 'Home', desc: '最初のステップにリセット' },
+      { key: 'Esc', desc: 'プレゼンテーションを終了' },
+    ],
+  },
 ];
 
 export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {

@@ -19,6 +19,7 @@ import {
   HelpCircle,
   FileText,
   FolderSearch,
+  PlayCircle,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -50,6 +51,8 @@ interface ToolbarProps {
   currentSearchIndex: number;
   onNextSearch: () => void;
   onPrevSearch: () => void;
+  isPresentationActive?: boolean;
+  onTogglePresentation?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -81,6 +84,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   currentSearchIndex,
   onNextSearch,
   onPrevSearch,
+  isPresentationActive = false,
+  onTogglePresentation,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -296,6 +301,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <FolderSearch size={15} className="searcher-btn-icon" />
         <span>フォルダ横断検索</span>
       </button>
+
+      {onTogglePresentation && (
+        <button
+          className={`toolbar-btn presentation-trigger-btn ${
+            isPresentationActive ? 'active' : ''
+          }`}
+          title="思考の成長・プレゼンテーション自動再生 (F5)"
+          onClick={onTogglePresentation}
+        >
+          <PlayCircle size={15} className="presentation-btn-icon" />
+          <span>思考再生 (F5)</span>
+        </button>
+      )}
 
       <div className="toolbar-spacer" />
 

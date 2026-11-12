@@ -15,6 +15,8 @@ export interface LayoutNode {
 
 export interface EdgePath {
   id: string;
+  sourceId: string;
+  targetId: string;
   d: string;
   color: string;
   width: number;
@@ -23,6 +25,8 @@ export interface EdgePath {
 
 export interface RenderArrowLink {
   id: string;
+  sourceId: string;
+  targetId: string;
   d: string;
   color: string;
   targetX: number;
@@ -201,6 +205,8 @@ export function computeLayout(rootNode: FreeMindNode): {
 
           arrowLinks.push({
             id: `${lNode.id}->${dest.id}`,
+            sourceId: lNode.id,
+            targetId: dest.id,
             d,
             color: al.color || '#e11d48',
             targetX: tx,
@@ -357,6 +363,8 @@ function createEdgePath(parent: LayoutNode, child: LayoutNode, side: NodePositio
 
   return {
     id: `${parent.id}->${child.id}`,
+    sourceId: parent.id,
+    targetId: child.id,
     d,
     color,
     width,

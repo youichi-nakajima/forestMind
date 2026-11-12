@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { FreeMindMap, FreeMindNode, NodePosition } from '../types/freemind';
 import { initialFreeMindMap } from '../data/defaultMap';
 import { generateNodeId, parseFreeMindXml } from '../parser/freemindParser';
 import { serializeFreeMindXml } from '../parser/freemindSerializer';
+import { serializeSubtreeToMarkdown, parseMarkdownToSubtree } from '../utils/markdownUtils';
 
 export interface MapTab {
   id: string;
@@ -394,6 +395,215 @@ export function useMindMap() {
     [map.root.id, updateTree]
   );
 
+  // Clipboard storage in memory
+  const clipboardRef = useRef<FreeMindNode | null>(null);
+
+  // Helper to deep-clone a subtree with fresh unique IDs
+  const cloneSubtree = useCallback((node: FreeMindNode, newPosition?: NodePosition): FreeMindNode => {
+    return {
+      ...node,
+      id: generateNodeId(),
+      position: newPosition ?? node.position,
+      created: Date.now(),
+      modified: Date.now(),
+      children: node.children.map(c => cloneSubtree(c, newPosition ?? c.position)),
+    };
+  }, []);
+
+  // Copy node and its subtree to internal clipboard and system clipboard
+  const copyNode = useCallback(
+    async (nodeId?: string): Promise<boolean> => {
+      const targetId = nodeId || selectedNodeId;
+      if (!targetId) return false;
+      const targetNode = findNode(map.root, targetId);
+      if (!targetNode) return false;
+
+      clipboardRef.current = cloneSubtree(targetNode);
+
+      try {
+        const mdText = serializeSubtreeToMarkdown(targetNode);
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(mdText);
+        }
+      } catch {
+        // System clipboard write may fail if document is not focused; internal clipboard works
+      }
+
+      return true;
+    },
+    [selectedNodeId, map.root, cloneSubtree]
+  );
+
+  // Cut node and its subtree (root cannot be cut)
+  const cutNode = useCallback(
+    async (nodeId?: string): Promise<boolean> => {
+      const targetId = nodeId || selectedNodeId;
+      if (!targetId || targetId === map.root.id) return false;
+      const copied = await copyNode(targetId);
+      if (copied) {
+        deleteNode(targetId);
+        return true;
+      }
+      return false;
+    },
+    [selectedNodeId, map.root.id, copyNode, deleteNode]
+  );
+
+  // Paste node subtree as child of target node
+  const pasteNode = useCallback(
+    async (targetParentId?: string): Promise<boolean> => {
+      const parentId = targetParentId || selectedNodeId || map.root.id;
+
+      // 1. Try internal clipboard first
+      if (clipboardRef.current) {
+        const cloned = cloneSubtree(clipboardRef.current);
+        let pastedId: string | null = null;
+        updateTree(root => {
+          const parent = findNode(root, parentId);
+          if (!parent) return false;
+
+          if (parent.id === root.id) {
+            const rightCount = parent.children.filter(c => c.position !== 'left').length;
+            const leftCount = parent.children.filter(c => c.position === 'left').length;
+            cloned.position = rightCount <= leftCount ? 'right' : 'left';
+          } else {
+            cloned.position = parent.position;
+          }
+
+          parent.folded = false;
+          parent.children.push(cloned);
+          pastedId = cloned.id;
+          return true;
+        });
+
+        if (pastedId) {
+          setSelectedNodeId(pastedId);
+          return true;
+        }
+      }
+
+      // 2. Try reading from system clipboard as fallback
+      try {
+        if (navigator.clipboard?.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim()) {
+            const nodes = parseMarkdownToSubtree(text);
+            if (nodes.length > 0) {
+              let firstId: string | null = null;
+              updateTree(root => {
+                const parent = findNode(root, parentId);
+                if (!parent) return false;
+
+                nodes.forEach(n => {
+                  if (parent.id === root.id) {
+                    const rightCount = parent.children.filter(c => c.position !== 'left').length;
+                    const leftCount = parent.children.filter(c => c.position === 'left').length;
+                    n.position = rightCount <= leftCount ? 'right' : 'left';
+                  } else {
+                    n.position = parent.position;
+                  }
+                  parent.children.push(n);
+                  if (!firstId) firstId = n.id;
+                });
+                parent.folded = false;
+                return true;
+              });
+
+              if (firstId) {
+                setSelectedNodeId(firstId);
+                return true;
+              }
+            }
+          }
+        }
+      } catch {
+        // System clipboard read permission denied
+      }
+
+      return false;
+    },
+    [selectedNodeId, map.root.id, cloneSubtree, updateTree, setSelectedNodeId]
+  );
+
+  // Duplicate node (creates identical copy right after itself under the same parent)
+  const duplicateNode = useCallback(
+    (nodeId?: string): boolean => {
+      const targetId = nodeId || selectedNodeId;
+      if (!targetId || targetId === map.root.id) return false;
+
+      let newId: string | null = null;
+      updateTree(root => {
+        const parent = findParentNode(root, targetId);
+        if (!parent) return false;
+        const index = parent.children.findIndex(c => c.id === targetId);
+        if (index === -1) return false;
+        const target = parent.children[index];
+        const cloned = cloneSubtree(target, target.position);
+        parent.children.splice(index + 1, 0, cloned);
+        newId = cloned.id;
+        return true;
+      });
+
+      if (newId) {
+        setSelectedNodeId(newId);
+        return true;
+      }
+      return false;
+    },
+    [selectedNodeId, map.root.id, cloneSubtree, updateTree, setSelectedNodeId]
+  );
+
+  // Reorder node among siblings (Alt+Up / Alt+Down)
+  const reorderNode = useCallback(
+    (nodeId: string, direction: 'up' | 'down'): boolean => {
+      if (nodeId === map.root.id) return false;
+
+      let success = false;
+      updateTree(root => {
+        const parent = findParentNode(root, nodeId);
+        if (!parent) return false;
+
+        if (parent.id === root.id) {
+          const node = parent.children.find(c => c.id === nodeId);
+          if (!node) return false;
+          const side = node.position || 'right';
+          const sameSideItems = parent.children
+            .map((c, idx) => ({ c, idx }))
+            .filter(item => (item.c.position || 'right') === side);
+
+          const currentPos = sameSideItems.findIndex(item => item.c.id === nodeId);
+          if (currentPos === -1) return false;
+
+          const targetPos = direction === 'up' ? currentPos - 1 : currentPos + 1;
+          if (targetPos < 0 || targetPos >= sameSideItems.length) return false;
+
+          const fromIdx = sameSideItems[currentPos].idx;
+          const toIdx = sameSideItems[targetPos].idx;
+
+          const temp = parent.children[fromIdx];
+          parent.children[fromIdx] = parent.children[toIdx];
+          parent.children[toIdx] = temp;
+          success = true;
+          return true;
+        } else {
+          const index = parent.children.findIndex(c => c.id === nodeId);
+          if (index === -1) return false;
+
+          const targetIndex = direction === 'up' ? index - 1 : index + 1;
+          if (targetIndex < 0 || targetIndex >= parent.children.length) return false;
+
+          const temp = parent.children[index];
+          parent.children[index] = parent.children[targetIndex];
+          parent.children[targetIndex] = temp;
+          success = true;
+          return true;
+        }
+      });
+      return success;
+    },
+    [map.root.id, updateTree]
+  );
+
   const loadMapFromXml = useCallback(
     (xmlString: string, asNewTab: boolean = true) => {
       try {
@@ -601,6 +811,11 @@ export function useMindMap() {
     foldAll,
     updateNodeProperties,
     moveNode,
+    copyNode,
+    cutNode,
+    pasteNode,
+    duplicateNode,
+    reorderNode,
     undo,
     redo,
     canUndo: activeTab.past.length > 0,

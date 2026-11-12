@@ -29,6 +29,11 @@ interface MindMapCanvasProps {
   autoCenter?: boolean;
   isSpotlightEnabled?: boolean;
   spotlightNodeIds?: Set<string>;
+  onCopyNode?: () => void;
+  onCutNode?: () => void;
+  onPasteNode?: () => void;
+  onDuplicateNode?: () => void;
+  onReorderNode?: (nodeId: string, direction: 'up' | 'down') => void;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
@@ -43,6 +48,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onUpdateText,
   onToggleFold,
   onMoveNode,
+  onCopyNode,
+  onCutNode,
+  onPasteNode,
+  onDuplicateNode,
+  onReorderNode,
   onUndo,
   onRedo,
   zoomScale,
@@ -208,6 +218,41 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
       if (!selectedNodeId) return;
 
+      // Duplicate node with Ctrl+D
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        onDuplicateNode?.();
+        return;
+      }
+
+      // Copy node with Ctrl+C
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        onCopyNode?.();
+        return;
+      }
+
+      // Cut node with Ctrl+X
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        onCutNode?.();
+        return;
+      }
+
+      // Paste node with Ctrl+V
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        onPasteNode?.();
+        return;
+      }
+
+      // Reorder siblings with Alt+ArrowUp / Alt+ArrowDown
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        onReorderNode?.(selectedNodeId, e.key === 'ArrowUp' ? 'up' : 'down');
+        return;
+      }
+
       const currentLayout = layoutNodes.get(selectedNodeId);
 
       // Arrow Key Navigation (FreeMind style)
@@ -287,6 +332,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onAddSibling,
       onDeleteNode,
       onToggleFold,
+      onCopyNode,
+      onCutNode,
+      onPasteNode,
+      onDuplicateNode,
+      onReorderNode,
       onUndo,
       onRedo,
       setSelectedNodeId,

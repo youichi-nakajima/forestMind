@@ -33,6 +33,11 @@ export const App: React.FC = () => {
     foldAll,
     updateNodeProperties,
     moveNode,
+    copyNode,
+    cutNode,
+    pasteNode,
+    duplicateNode,
+    reorderNode,
     undo,
     redo,
     canUndo,
@@ -58,6 +63,48 @@ export const App: React.FC = () => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Dark mode state with persistence
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('forestmind_dark_mode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+  });
+
+  const toggleDarkMode = useCallback(() => {
+    setIsDarkMode(prev => {
+      const next = !prev;
+      localStorage.setItem('forestmind_dark_mode', String(next));
+      return next;
+    });
+  }, []);
+
+  // Toast feedback helper
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 1800);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyNode();
+    if (ok) showToast('📋 ノードをコピーしました');
+  }, [copyNode, showToast]);
+
+  const handleCut = useCallback(async () => {
+    const ok = await cutNode();
+    if (ok) showToast('✂️ ノードをカットしました');
+  }, [cutNode, showToast]);
+
+  const handlePaste = useCallback(async () => {
+    const ok = await pasteNode();
+    if (ok) showToast('📋 ノードを貼り付けました');
+  }, [pasteNode, showToast]);
+
+  const handleDuplicate = useCallback(() => {
+    const ok = duplicateNode();
+    if (ok) showToast('📑 ノードを複製しました');
+  }, [duplicateNode, showToast]);
 
   // Toggle cinema fullscreen mode
   const handleToggleCinemaMode = useCallback(() => {
@@ -219,7 +266,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`app-container ${
+      className={`app-container ${isDarkMode ? 'theme-dark' : ''} ${
         isPresentationActive && isCinemaMode ? 'presentation-cinema' : ''
       }`}
     >
@@ -234,6 +281,10 @@ export const App: React.FC = () => {
         onAddChild={() => selectedNodeId && addChildNode(selectedNodeId)}
         onAddSibling={() => selectedNodeId && addSiblingNode(selectedNodeId)}
         onDelete={() => selectedNodeId && deleteNode(selectedNodeId)}
+        onCopyNode={handleCopy}
+        onDuplicateNode={handleDuplicate}
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleDarkMode}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}
@@ -317,6 +368,11 @@ export const App: React.FC = () => {
               onUpdateText={updateNodeText}
               onToggleFold={toggleFold}
               onMoveNode={moveNode}
+              onCopyNode={handleCopy}
+              onCutNode={handleCut}
+              onPasteNode={handlePaste}
+              onDuplicateNode={handleDuplicate}
+              onReorderNode={reorderNode}
               onUndo={undo}
               onRedo={redo}
               zoomScale={zoomScale}
@@ -381,19 +437,20 @@ export const App: React.FC = () => {
       {/* Shortcut & Status Footer */}
       <footer className="status-bar">
         <div className="status-hints">
-          <span className="shortcut-chip"><kbd>Tab</kbd>子ノード追加</span>
-          <span className="shortcut-chip"><kbd>Enter</kbd>兄弟ノード追加</span>
-          <span className="shortcut-chip"><kbd>↑↓←→</kbd>ノード間移動</span>
-          <span className="shortcut-chip"><kbd>F2 / ダブルクリック</kbd>編集</span>
-          <span className="shortcut-chip"><kbd>Space</kbd>開閉トグル</span>
+          <span className="shortcut-chip"><kbd>Tab</kbd>子ノード</span>
+          <span className="shortcut-chip"><kbd>Enter</kbd>兄弟ノード</span>
+          <span className="shortcut-chip"><kbd>Alt+↑↓</kbd>並び替え</span>
+          <span className="shortcut-chip"><kbd>Ctrl+C/V/X</kbd>コピペ/カット</span>
+          <span className="shortcut-chip"><kbd>Ctrl+D</kbd>複製</span>
+          <span className="shortcut-chip"><kbd>F2</kbd>編集</span>
+          <span className="shortcut-chip"><kbd>Space</kbd>開閉</span>
           <span className="shortcut-chip"><kbd>Del</kbd>削除</span>
-          <span className="shortcut-chip"><kbd>ドラッグ＆ドロップ</kbd>階層移動</span>
-          <span className="shortcut-chip"><kbd>Ctrl+Z / Y</kbd>Undo/Redo</span>
           <span className="shortcut-chip highlight"><kbd>F5</kbd>思考再生</span>
-          <span className="shortcut-chip"><kbd>F</kbd>シネマ全画面</span>
-          <span className="shortcut-chip"><kbd>L</kbd>スポットライト</span>
         </div>
       </footer>
+
+      {/* Floating Toast Feedback */}
+      {toastMessage && <div className="forest-toast">{toastMessage}</div>}
 
       {/* Help Modal */}
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />

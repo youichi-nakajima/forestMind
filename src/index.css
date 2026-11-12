@@ -413,9 +413,43 @@ body {
   border-radius: 4px;
 }
 .mindmap-node.drag-target {
-  outline: 2px dashed #059669 !important;
+  outline: 2.5px dashed #059669 !important;
   outline-offset: 4px;
   background-color: #ecfdf5 !important;
+  box-shadow: 0 0 0 6px rgba(5, 150, 105, 0.18), 0 8px 20px rgba(5, 150, 105, 0.22) !important;
+  transform: scale(1.02);
+  transition: all 0.15s ease;
+}
+
+.mindmap-node.drag-target::after {
+  content: '➕ 子ノードとして移動';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  background: #065f46;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  animation: dropBadgePop 0.15s ease-out;
+}
+
+@keyframes dropBadgePop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }
 .mindmap-node.style-bubble.selected,
 .mindmap-node.root-node.selected {
@@ -2248,4 +2282,170 @@ body {
   background-color: #eff6ff;
   border-color: #93c5fd;
   color: #1d4ed8;
+}
+
+/* ==========================================================================
+   Toast Notification
+   ========================================================================== */
+.forest-toast {
+  position: fixed;
+  bottom: 48px;
+  right: 24px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ==========================================================================
+   Dark Theme (森林の夜 / Deep Slate Dark)
+   ========================================================================== */
+.app-container.theme-dark {
+  background-color: #0b0f17;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .toolbar,
+.app-container.theme-dark .tab-bar,
+.app-container.theme-dark .status-bar {
+  background-color: #111827;
+  border-color: #1f2937;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .toolbar-btn {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .toolbar-btn:hover {
+  background-color: #374151;
+  border-color: #4b5563;
+}
+
+.app-container.theme-dark .toolbar-btn.active {
+  background-color: #047857;
+  border-color: #059669;
+  color: #ffffff;
+}
+
+.app-container.theme-dark .mindmap-canvas-container {
+  background-color: #0b0f17;
+  background-image: radial-gradient(#1e293b 1.2px, transparent 1.2px);
+}
+
+.app-container.theme-dark .node-properties-panel {
+  background-color: #111827;
+  border-color: #1f2937;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .properties-panel-header,
+.app-container.theme-dark .property-section {
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .form-input,
+.app-container.theme-dark .form-textarea,
+.app-container.theme-dark .form-select {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .form-label {
+  color: #cbd5e1;
+}
+
+.app-container.theme-dark .mindmap-node.style-fork {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .mindmap-node.style-bubble {
+  background-color: #1e293b;
+  color: #f1f5f9;
+  border-color: #475569;
+}
+
+.app-container.theme-dark .mindmap-node.root-node {
+  background-color: #064e3b;
+  color: #ecfdf5;
+  border-color: #059669;
+}
+
+.app-container.theme-dark .tab-item {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .tab-item.active {
+  background-color: #111827;
+  color: #10b981;
+  border-bottom-color: #10b981;
+}
+
+.app-container.theme-dark .tab-item:hover {
+  background-color: #283548;
+}
+
+.app-container.theme-dark .shortcut-chip {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .shortcut-chip kbd {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .modal-dialog {
+  background-color: #111827;
+  border-color: #1f2937;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .modal-header {
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .shortcut-group-card {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.app-container.theme-dark .toolbar-search-input {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .zoom-text {
+  color: #cbd5e1;
 }

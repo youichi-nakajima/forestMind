@@ -21,6 +21,10 @@ import {
   FolderSearch,
   PlayCircle,
   ArrowLeft,
+  Sun,
+  Moon,
+  Copy,
+  CopyPlus,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -30,6 +34,10 @@ interface ToolbarProps {
   onAddChild: () => void;
   onAddSibling: () => void;
   onDelete: () => void;
+  onCopyNode?: () => void;
+  onDuplicateNode?: () => void;
+  isDarkMode?: boolean;
+  onToggleTheme?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -66,6 +74,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddChild,
   onAddSibling,
   onDelete,
+  onCopyNode,
+  onDuplicateNode,
+  isDarkMode = false,
+  onToggleTheme,
   onUndo,
   onRedo,
   canUndo,
@@ -292,6 +304,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <Trash2 size={16} />
           <span>削除</span>
         </button>
+        {onCopyNode && (
+          <button
+            className="toolbar-btn icon-only"
+            title="ノードをコピー (Ctrl+C)"
+            disabled={!selectedNodeId}
+            onClick={onCopyNode}
+          >
+            <Copy size={15} />
+          </button>
+        )}
+        {onDuplicateNode && (
+          <button
+            className="toolbar-btn icon-only"
+            title="ノードを複製 (Ctrl+D)"
+            disabled={!selectedNodeId || isRootSelected}
+            onClick={onDuplicateNode}
+          >
+            <CopyPlus size={15} />
+          </button>
+        )}
       </div>
 
       <div className="toolbar-divider" />
@@ -439,6 +471,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <HelpCircle size={16} />
         </button>
+        {onToggleTheme && (
+          <button
+            className="toolbar-btn icon-only"
+            title={isDarkMode ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え'}
+            onClick={onToggleTheme}
+          >
+            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        )}
         <button
           className="toolbar-btn icon-only secondary"
           title="初期サンプルマップを復元"

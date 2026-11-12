@@ -12,9 +12,12 @@ const SHORTCUT_GROUPS = [
     items: [
       { key: 'Tab / Insert', desc: '子ノードを追加' },
       { key: 'Enter', desc: '兄弟ノードを追加' },
+      { key: 'Ctrl + C / X / V', desc: 'コピー / カット / 貼り付け（Markdown対応）' },
+      { key: 'Ctrl + D', desc: '選択ノードを複製 (Duplicate)' },
+      { key: 'Alt + ↑ / ↓', desc: '兄弟ノードの順番を上下に入れ替え' },
       { key: 'F2 / ダブルクリック', desc: 'インラインテキスト編集' },
       { key: 'Delete / Backspace', desc: '選択ノードを削除' },
-      { key: 'ドラッグ＆ドロップ', desc: 'ノードを別の親ノードへ移動・並び替え' },
+      { key: 'ドラッグ＆ドロップ', desc: 'ノードを別の親ノードへ移動' },
     ],
   },
   {

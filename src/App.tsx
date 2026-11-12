@@ -10,6 +10,7 @@ import { ForestOverview } from './components/ForestOverview';
 import { HelpModal } from './components/HelpModal';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
+import { resumeAudioContext } from './utils/audio';
 
 export const App: React.FC = () => {
   const {
@@ -67,6 +68,8 @@ export const App: React.FC = () => {
     setSpeed: setPresentationSpeed,
     autoCenter,
     setAutoCenter,
+    isSoundEnabled,
+    setIsSoundEnabled,
     currentStepIndex,
     steps: presentationSteps,
     currentStep: activePresentationStep,
@@ -87,6 +90,7 @@ export const App: React.FC = () => {
 
   // Toggle presentation via F5 or button
   const handleTogglePresentation = () => {
+    resumeAudioContext();
     if (isPresentationActive) {
       stopPresentation();
     } else {
@@ -301,6 +305,8 @@ export const App: React.FC = () => {
                 onChangeSpeed={setPresentationSpeed}
                 autoCenter={autoCenter}
                 onToggleAutoCenter={() => setAutoCenter(c => !c)}
+                isSoundEnabled={isSoundEnabled}
+                onToggleSound={() => setIsSoundEnabled(s => !s)}
                 onSeek={goToPresentationStep}
               />
             )}

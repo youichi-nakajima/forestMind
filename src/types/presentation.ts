@@ -20,3 +20,4 @@ export interface PresentationState {
   speed: number; // Interval in seconds (e.g. 1.5, 2.5, 4.0)
   autoCenter: boolean;
 }
+

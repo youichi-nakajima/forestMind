@@ -10,6 +10,8 @@ import {
   Clock,
   GitBranch,
   Layers,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { PresentationOrderMode, PresentationStep } from '../types/presentation';
 
@@ -29,6 +31,8 @@ interface PresentationControlsProps {
   onChangeSpeed: (speed: number) => void;
   autoCenter: boolean;
   onToggleAutoCenter: () => void;
+  isSoundEnabled?: boolean;
+  onToggleSound?: () => void;
   onSeek: (stepIndex: number) => void;
 }
 
@@ -48,6 +52,8 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
   onChangeSpeed,
   autoCenter,
   onToggleAutoCenter,
+  isSoundEnabled = true,
+  onToggleSound,
   onSeek,
 }) => {
   // Global presentation shortcuts
@@ -214,7 +220,7 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
             </button>
           </div>
 
-          {/* Right Actions: Speed, AutoCenter */}
+          {/* Right Actions: Speed, Sound, AutoCenter */}
           <div className="player-ctrl-group right">
             {/* Speed Selector */}
             <div className="player-speed-select-wrap">
@@ -224,12 +230,29 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
                 onChange={e => onChangeSpeed(parseFloat(e.target.value))}
                 title="1ステップあたりの間隔"
               >
+                <option value="0.5">最速 (0.5秒)</option>
                 <option value="1.0">速め (1秒)</option>
                 <option value="2.0">標準 (2秒)</option>
                 <option value="3.5">ゆったり (3.5秒)</option>
                 <option value="5.0">じっくり (5秒)</option>
               </select>
             </div>
+
+            {/* Bubble Pop Sound Toggle */}
+            {onToggleSound && (
+              <button
+                type="button"
+                className={`player-btn icon-only ${isSoundEnabled ? 'active' : ''}`}
+                title={
+                  isSoundEnabled
+                    ? 'シャボン玉効果音: ON (ノード出現時にポップ音)'
+                    : 'シャボン玉効果音: OFF (ミュート)'
+                }
+                onClick={onToggleSound}
+              >
+                {isSoundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+              </button>
+            )}
 
             {/* Auto Center Toggle */}
             <button
@@ -250,3 +273,4 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
     </div>
   );
 };
+

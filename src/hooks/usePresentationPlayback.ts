@@ -5,6 +5,7 @@ import {
   buildPresentationSequence,
   getVisibleNodeIdsAtStep,
 } from '../utils/presentationSequence';
+import { playBubblePopSound } from '../utils/audio';
 
 interface UsePresentationPlaybackProps {
   rootNode: FreeMindNode;
@@ -21,6 +22,7 @@ export function usePresentationPlayback({
   const [speed, setSpeed] = useState<number>(2.0); // seconds per step
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [autoCenter, setAutoCenter] = useState(true);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
 
   // Rebuild steps whenever rootNode or mode changes
   const steps: PresentationStep[] = useMemo(() => {
@@ -41,6 +43,20 @@ export function usePresentationPlayback({
   }, [isActive, rootNode, steps, currentStepIndex]);
 
   const activeNodeId = currentStep ? currentStep.nodeId : null;
+
+  // Track previous step index to play sound only when stepping forward
+  const prevIndexRef = useRef(currentStepIndex);
+
+  // Play bubble pop sound when a new node appears
+  useEffect(() => {
+    if (isActive && isSoundEnabled && currentStep) {
+      // Play pop sound when step index increases or starts
+      if (currentStepIndex >= prevIndexRef.current) {
+        playBubblePopSound({ depth: currentStep.depth });
+      }
+    }
+    prevIndexRef.current = currentStepIndex;
+  }, [isActive, isSoundEnabled, currentStepIndex, currentStep]);
 
   // Notify active node change
   useEffect(() => {
@@ -118,7 +134,7 @@ export function usePresentationPlayback({
   useEffect(() => {
     if (!isActive || !isPlaying) return;
 
-    const intervalMs = Math.max(500, speed * 1000);
+    const intervalMs = Math.max(200, speed * 1000);
     const timer = setInterval(() => {
       nextStepRef.current();
     }, intervalMs);
@@ -135,6 +151,8 @@ export function usePresentationPlayback({
     setSpeed,
     autoCenter,
     setAutoCenter,
+    isSoundEnabled,
+    setIsSoundEnabled,
     currentStepIndex,
     steps,
     currentStep,
@@ -150,3 +168,4 @@ export function usePresentationPlayback({
     goToStep,
   };
 }
+

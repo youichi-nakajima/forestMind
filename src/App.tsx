@@ -57,6 +57,35 @@ export const App: React.FC = () => {
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
+  const [isCinemaMode, setIsCinemaMode] = useState(false);
+
+  // Toggle cinema fullscreen mode
+  const handleToggleCinemaMode = useCallback(() => {
+    setIsCinemaMode(prev => {
+      const next = !prev;
+      if (next) {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // Listen to fullscreen changes from Esc or browser chrome
+  useEffect(() => {
+    const handleFsChange = () => {
+      if (!document.fullscreenElement) {
+        setIsCinemaMode(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   // Presentation Playback Hook
   const {
@@ -70,6 +99,9 @@ export const App: React.FC = () => {
     setAutoCenter,
     isSoundEnabled,
     setIsSoundEnabled,
+    isSpotlightEnabled,
+    setIsSpotlightEnabled,
+    spotlightNodeIds,
     currentStepIndex,
     steps: presentationSteps,
     currentStep: activePresentationStep,
@@ -92,6 +124,10 @@ export const App: React.FC = () => {
   const handleTogglePresentation = useCallback(() => {
     resumeAudioContext();
     if (isPresentationActive) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      setIsCinemaMode(false);
       stopPresentation();
     } else {
       setIsForestViewOpen(false);
@@ -182,7 +218,11 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
+    <div
+      className={`app-container ${
+        isPresentationActive && isCinemaMode ? 'presentation-cinema' : ''
+      }`}
+    >
       {/* Top Toolbar */}
       <Toolbar
         isForestViewOpen={isForestViewOpen}
@@ -293,6 +333,8 @@ export const App: React.FC = () => {
               visibleNodeIds={presentationVisibleNodeIds}
               activeNodeId={presentationActiveNodeId}
               autoCenter={autoCenter}
+              isSpotlightEnabled={isSpotlightEnabled}
+              spotlightNodeIds={spotlightNodeIds}
             />
 
             {/* Presentation Floating Controls */}
@@ -315,6 +357,10 @@ export const App: React.FC = () => {
                 onToggleAutoCenter={() => setAutoCenter(c => !c)}
                 isSoundEnabled={isSoundEnabled}
                 onToggleSound={() => setIsSoundEnabled(s => !s)}
+                isSpotlightEnabled={isSpotlightEnabled}
+                onToggleSpotlight={() => setIsSpotlightEnabled(s => !s)}
+                isFullscreen={isCinemaMode}
+                onToggleFullscreen={handleToggleCinemaMode}
                 onSeek={goToPresentationStep}
               />
             )}
@@ -344,6 +390,8 @@ export const App: React.FC = () => {
           <span className="shortcut-chip"><kbd>ドラッグ＆ドロップ</kbd>階層移動</span>
           <span className="shortcut-chip"><kbd>Ctrl+Z / Y</kbd>Undo/Redo</span>
           <span className="shortcut-chip highlight"><kbd>F5</kbd>思考再生</span>
+          <span className="shortcut-chip"><kbd>F</kbd>シネマ全画面</span>
+          <span className="shortcut-chip"><kbd>L</kbd>スポットライト</span>
         </div>
       </footer>
 

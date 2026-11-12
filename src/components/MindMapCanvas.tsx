@@ -27,6 +27,8 @@ interface MindMapCanvasProps {
   visibleNodeIds?: Set<string>;
   activeNodeId?: string | null;
   autoCenter?: boolean;
+  isSpotlightEnabled?: boolean;
+  spotlightNodeIds?: Set<string>;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
@@ -53,6 +55,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   visibleNodeIds,
   activeNodeId,
   autoCenter = true,
+  isSpotlightEnabled = true,
+  spotlightNodeIds,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -89,8 +93,17 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const targetPanX = centerX - targetNode.x * zoomScale;
-    const targetPanY = centerY - targetNode.y * zoomScale;
+    // Smooth framing: frame active node together with its immediate parent
+    // so both the branch emergence and the new node are beautifully centered
+    let targetX = targetNode.x;
+    let targetY = targetNode.y;
+    if (targetNode.parent) {
+      targetX = targetNode.x * 0.72 + targetNode.parent.x * 0.28;
+      targetY = targetNode.y * 0.72 + targetNode.parent.y * 0.28;
+    }
+
+    const targetPanX = centerX - targetX * zoomScale;
+    const targetPanY = centerY - targetY * zoomScale;
 
     setPanOffset(() => ({
       x: targetPanX,
@@ -331,22 +344,27 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           {/* Clouds */}
           {clouds
             .filter(c => !isPresentationActive || visibleNodeIds?.has(c.id))
-            .map(c => (
-              <rect
-                key={c.id}
-                x={c.x}
-                y={c.y}
-                width={c.width}
-                height={c.height}
-                rx="18"
-                ry="18"
-                fill={c.color}
-                opacity="0.4"
-                stroke={c.color}
-                strokeWidth="1.5"
-                strokeDasharray="4 3"
-              />
-            ))}
+            .map(c => {
+              const isDimmedCloud =
+                isPresentationActive && isSpotlightEnabled && spotlightNodeIds && !spotlightNodeIds.has(c.id);
+              return (
+                <rect
+                  key={c.id}
+                  x={c.x}
+                  y={c.y}
+                  width={c.width}
+                  height={c.height}
+                  rx="18"
+                  ry="18"
+                  fill={c.color}
+                  opacity={isDimmedCloud ? '0.1' : '0.4'}
+                  stroke={c.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  className={`mindmap-cloud ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
+                />
+              );
+            })}
 
           {/* Branch Edges */}
           {edges
@@ -355,17 +373,30 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 !isPresentationActive ||
                 (visibleNodeIds?.has(edge.sourceId) && visibleNodeIds?.has(edge.targetId))
             )
-            .map((edge: EdgePath) => (
-              <path
-                key={edge.id}
-                d={edge.d}
-                fill="none"
-                stroke={edge.color}
-                strokeWidth={edge.width}
-                strokeLinecap="round"
-                className="mindmap-edge"
-              />
-            ))}
+            .map((edge: EdgePath) => {
+              const isSpotlightEdge =
+                isPresentationActive &&
+                isSpotlightEnabled &&
+                spotlightNodeIds &&
+                spotlightNodeIds.has(edge.sourceId) &&
+                spotlightNodeIds.has(edge.targetId);
+              const isDimmedEdge =
+                isPresentationActive && isSpotlightEnabled && !isSpotlightEdge;
+
+              return (
+                <path
+                  key={edge.id}
+                  d={edge.d}
+                  fill="none"
+                  stroke={isSpotlightEdge ? '#8b5cf6' : edge.color}
+                  strokeWidth={isSpotlightEdge ? Math.max(edge.width + 1.8, 3.5) : edge.width}
+                  strokeLinecap="round"
+                  className={`mindmap-edge ${
+                    isSpotlightEdge ? 'presentation-spotlight-edge' : ''
+                  } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''}`}
+                />
+              );
+            })}
 
           {/* FreeMind Arrow Links */}
           {arrowLinks
@@ -374,17 +405,31 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 !isPresentationActive ||
                 (visibleNodeIds?.has(al.sourceId) && visibleNodeIds?.has(al.targetId))
             )
-            .map(al => (
-              <path
-                key={al.id}
-                d={al.d}
-                stroke={al.color}
-                strokeWidth="2"
-                strokeDasharray="5 4"
-                fill="none"
-                markerEnd="url(#arrow)"
-              />
-            ))}
+            .map(al => {
+              const isSpotlightArrow =
+                isPresentationActive &&
+                isSpotlightEnabled &&
+                spotlightNodeIds &&
+                spotlightNodeIds.has(al.sourceId) &&
+                spotlightNodeIds.has(al.targetId);
+              const isDimmedArrow =
+                isPresentationActive && isSpotlightEnabled && !isSpotlightArrow;
+
+              return (
+                <path
+                  key={al.id}
+                  d={al.d}
+                  stroke={isSpotlightArrow ? '#8b5cf6' : al.color}
+                  strokeWidth={isSpotlightArrow ? 3 : 2}
+                  strokeDasharray="5 4"
+                  fill="none"
+                  markerEnd="url(#arrow)"
+                  className={`mindmap-arrow-link ${
+                    isSpotlightArrow ? 'presentation-spotlight-arrow' : ''
+                  } ${isDimmedArrow ? 'presentation-dimmed-arrow' : ''}`}
+                />
+              );
+            })}
         </svg>
 
         {/* Nodes Layer */}
@@ -397,6 +442,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               const isEditing = editingNodeId === lNode.id;
               const isPresentationActiveNode =
                 isPresentationActive && activeNodeId === lNode.id;
+              const isSpotlightPathNode =
+                isPresentationActive &&
+                isSpotlightEnabled &&
+                spotlightNodeIds &&
+                spotlightNodeIds.has(lNode.id);
+              const isDimmedNode =
+                isPresentationActive && isSpotlightEnabled && !isSpotlightPathNode;
               const node = lNode.node;
             const isRoot = lNode.side === 'root';
             const hasChildren = node.children.length > 0;
@@ -455,7 +507,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   dragOverNodeId === lNode.id ? 'drag-target' : ''
                 } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${
                   isPresentationActiveNode ? 'presentation-active-node' : ''
-                }`}
+                } ${
+                  isSpotlightPathNode && !isPresentationActiveNode ? 'presentation-spotlight-path' : ''
+                } ${isDimmedNode ? 'presentation-dimmed' : ''}`}
                 style={{
                   left: `${anchorLeft}px`,
                   top: `${lNode.y}px`,

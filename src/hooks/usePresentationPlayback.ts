@@ -23,6 +23,7 @@ export function usePresentationPlayback({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [autoCenter, setAutoCenter] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [isSpotlightEnabled, setIsSpotlightEnabled] = useState(true);
 
   // Rebuild steps whenever rootNode or mode changes
   const steps: PresentationStep[] = useMemo(() => {
@@ -43,6 +44,23 @@ export function usePresentationPlayback({
   }, [isActive, rootNode, steps, currentStepIndex]);
 
   const activeNodeId = currentStep ? currentStep.nodeId : null;
+
+  // Compute ancestral path (spotlight path) leading from root to active node
+  const spotlightNodeIds = useMemo(() => {
+    if (!isActive || !currentStep) return new Set<string>();
+    const path: string[] = [];
+    function findPath(curr: FreeMindNode, targetId: string): boolean {
+      path.push(curr.id);
+      if (curr.id === targetId) return true;
+      for (const child of curr.children) {
+        if (findPath(child, targetId)) return true;
+      }
+      path.pop();
+      return false;
+    }
+    findPath(rootNode, currentStep.nodeId);
+    return new Set<string>(path);
+  }, [isActive, currentStep, rootNode]);
 
   // Track previous step index to play sound only when stepping forward
   const prevIndexRef = useRef(currentStepIndex);
@@ -153,6 +171,9 @@ export function usePresentationPlayback({
     setAutoCenter,
     isSoundEnabled,
     setIsSoundEnabled,
+    isSpotlightEnabled,
+    setIsSpotlightEnabled,
+    spotlightNodeIds,
     currentStepIndex,
     steps,
     currentStep,

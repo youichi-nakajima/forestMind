@@ -12,6 +12,9 @@ import {
   Layers,
   Volume2,
   VolumeX,
+  Sparkles,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { PresentationOrderMode, PresentationStep } from '../types/presentation';
 
@@ -33,6 +36,10 @@ interface PresentationControlsProps {
   onToggleAutoCenter: () => void;
   isSoundEnabled?: boolean;
   onToggleSound?: () => void;
+  isSpotlightEnabled?: boolean;
+  onToggleSpotlight?: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   onSeek: (stepIndex: number) => void;
 }
 
@@ -54,6 +61,10 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
   onToggleAutoCenter,
   isSoundEnabled = true,
   onToggleSound,
+  isSpotlightEnabled = true,
+  onToggleSpotlight,
+  isFullscreen = false,
+  onToggleFullscreen,
   onSeek,
 }) => {
   // Global presentation shortcuts
@@ -82,12 +93,34 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
       } else if (e.code === 'Home') {
         e.preventDefault();
         onReset();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        onToggleFullscreen?.();
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        onToggleSpotlight?.();
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        onToggleAutoCenter();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        onToggleSound?.();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onTogglePlay, onNext, onPrev, onClose, onReset]);
+  }, [
+    onTogglePlay,
+    onNext,
+    onPrev,
+    onClose,
+    onReset,
+    onToggleFullscreen,
+    onToggleSpotlight,
+    onToggleAutoCenter,
+    onToggleSound,
+  ]);
 
   const progressPercent =
     totalSteps > 1 ? (currentStepIndex / (totalSteps - 1)) * 100 : 0;
@@ -254,19 +287,51 @@ export const PresentationControls: React.FC<PresentationControlsProps> = ({
               </button>
             )}
 
+            {/* Spotlight Mode Toggle */}
+            {onToggleSpotlight && (
+              <button
+                type="button"
+                className={`player-btn icon-only ${isSpotlightEnabled ? 'active' : ''}`}
+                title={
+                  isSpotlightEnabled
+                    ? 'スポットライト演出: ON (現在パスを強調・他を減光) [L]'
+                    : 'スポットライト演出: OFF (全体を均等表示) [L]'
+                }
+                onClick={onToggleSpotlight}
+              >
+                <Sparkles size={15} />
+              </button>
+            )}
+
             {/* Auto Center Toggle */}
             <button
               type="button"
               className={`player-btn icon-only ${autoCenter ? 'active' : ''}`}
               title={
                 autoCenter
-                  ? '自動カメラ追従: ON (ノードを中央にフォーカス)'
-                  : '自動カメラ追従: OFF'
+                  ? '自動カメラ追従: ON (ノードを中央にフォーカス) [C]'
+                  : '自動カメラ追従: OFF [C]'
               }
               onClick={onToggleAutoCenter}
             >
               <Crosshair size={15} />
             </button>
+
+            {/* Fullscreen Cinema Mode Toggle */}
+            {onToggleFullscreen && (
+              <button
+                type="button"
+                className={`player-btn icon-only ${isFullscreen ? 'active' : ''}`}
+                title={
+                  isFullscreen
+                    ? '通常表示に戻す [F]'
+                    : 'シネマ全画面モード [F]'
+                }
+                onClick={onToggleFullscreen}
+              >
+                {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            )}
           </div>
         </div>
       </div>

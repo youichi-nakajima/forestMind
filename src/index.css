@@ -1795,7 +1795,89 @@ body {
 
 /* Smooth Canvas Camera Motion */
 .mindmap-viewport.smooth-transition {
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Presentation Cinema & Fullscreen Mode
+   ========================================================================== */
+.app-container.presentation-cinema {
+  overflow: hidden;
+}
+
+.app-container.presentation-cinema .toolbar,
+.app-container.presentation-cinema .tab-bar,
+.app-container.presentation-cinema .status-bar {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  overflow: hidden;
+  transition: opacity 0.35s ease, height 0.35s ease, padding 0.35s ease;
+}
+
+.app-container.presentation-cinema .main-body {
+  height: 100vh;
+}
+
+.app-container.presentation-cinema .mindmap-canvas-container {
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, #f1f5f9 65%, #e2e8f0 100%);
+  transition: background 0.6s ease;
+}
+
+/* ==========================================================================
+   Spotlight & Dimmer Styles
+   ========================================================================== */
+/* Dimmed nodes not on the active thought path */
+.mindmap-node.presentation-dimmed {
+  opacity: 0.22 !important;
+  filter: grayscale(45%) contrast(85%);
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+}
+
+.mindmap-node.presentation-dimmed:hover {
+  opacity: 0.8 !important;
+  filter: none;
+}
+
+/* Active ancestral path nodes leading to current active thought */
+.mindmap-node.presentation-spotlight-path {
+  opacity: 1 !important;
+  filter: drop-shadow(0 2px 10px rgba(139, 92, 246, 0.18));
+  transition: opacity 0.4s ease, filter 0.4s ease;
+}
+
+/* Dimmed clouds and arrows */
+.mindmap-cloud.presentation-dimmed-cloud {
+  opacity: 0.08 !important;
+  transition: opacity 0.4s ease;
+}
+
+.mindmap-arrow-link.presentation-dimmed-arrow {
+  opacity: 0.12 !important;
+  transition: opacity 0.4s ease;
+}
+
+.mindmap-arrow-link.presentation-spotlight-arrow {
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.5));
+}
+
+/* Dimmed & spotlight branch edges */
+.mindmap-edge.presentation-dimmed-edge {
+  opacity: 0.15 !important;
+  transition: opacity 0.4s ease, stroke-width 0.4s ease;
+}
+
+.mindmap-edge.presentation-spotlight-edge {
+  opacity: 1 !important;
+  stroke: #8b5cf6 !important;
+  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.4));
+  transition: opacity 0.4s ease, stroke 0.4s ease, stroke-width 0.4s ease;
 }
 
 /* Active Spotlighted Node in Presentation */

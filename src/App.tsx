@@ -6,7 +6,8 @@ import { MindMapCanvas } from './components/MindMapCanvas';
 import { NodePropertiesPanel } from './components/NodePropertiesPanel';
 import { ForestOverview } from './components/ForestOverview';
 import { HelpModal } from './components/HelpModal';
-import { FreeMindNode } from './types/freemind';
+import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
+import { FreeMindNode, FreeMindMap } from './types/freemind';
 
 export const App: React.FC = () => {
   const {
@@ -44,6 +45,7 @@ export const App: React.FC = () => {
     searchResults,
     handleNextSearch,
     handlePrevSearch,
+    revealAndSelectNode,
   } = useMindMap();
 
   const [zoomScale, setZoomScale] = useState(1.0);
@@ -51,6 +53,24 @@ export const App: React.FC = () => {
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(true);
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isSearcherOpen, setIsSearcherOpen] = useState(false);
+
+  // Handler for jumping from FreeMindSearcher to map & node
+  const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {
+    // Check if map is already open in a tab
+    const existingTab = tabs.find(t => t.map.root.id === targetMap.root.id || t.title === title);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+    } else {
+      createNewTab(targetMap, title);
+    }
+    setIsForestViewOpen(false);
+
+    // Auto-unfold and select after tab switch
+    setTimeout(() => {
+      revealAndSelectNode(nodeId);
+    }, 50);
+  };
 
   // Find currently selected node object
   const selectedNode = useMemo(() => {
@@ -118,6 +138,7 @@ export const App: React.FC = () => {
         onUnfoldAll={unfoldAll}
         onFoldAll={foldAll}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenSearcher={() => setIsSearcherOpen(true)}
         onResetToDefault={resetToDefault}
         selectedNodeId={selectedNodeId}
         isRootSelected={isRootSelected}
@@ -226,6 +247,13 @@ export const App: React.FC = () => {
 
       {/* Help Modal */}
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      {/* FreeMindSearcher Folder Search Modal */}
+      <FreeMindSearcherModal
+        isOpen={isSearcherOpen}
+        onClose={() => setIsSearcherOpen(false)}
+        onOpenMapNode={handleOpenSearcherNode}
+      />
     </div>
   );
 };

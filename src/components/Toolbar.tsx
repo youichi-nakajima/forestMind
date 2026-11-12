@@ -18,6 +18,7 @@ import {
   ChevronsUp,
   HelpCircle,
   FileText,
+  FolderSearch,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -39,6 +40,7 @@ interface ToolbarProps {
   onUnfoldAll: () => void;
   onFoldAll: () => void;
   onOpenHelp: () => void;
+  onOpenSearcher: () => void;
   onResetToDefault: () => void;
   selectedNodeId: string | null;
   isRootSelected: boolean;
@@ -69,6 +71,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUnfoldAll,
   onFoldAll,
   onOpenHelp,
+  onOpenSearcher,
   onResetToDefault,
   selectedNodeId,
   isRootSelected,
@@ -284,6 +287,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </div>
         )}
       </div>
+
+      <button
+        className="toolbar-btn searcher-trigger-btn"
+        title="PC上のフォルダ配下の全.mmファイルを再帰探索・検索 (FreeMindSearcher)"
+        onClick={onOpenSearcher}
+      >
+        <FolderSearch size={15} className="searcher-btn-icon" />
+        <span>フォルダ横断検索</span>
+      </button>
 
       <div className="toolbar-spacer" />
 

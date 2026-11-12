@@ -495,7 +495,9 @@ body {
   z-index: 5;
 }
 
-.side-right .fold-handle {
+.side-right .fold-handle,
+.side-root .fold-handle,
+.root-node .fold-handle {
   right: -10px;
 }
 

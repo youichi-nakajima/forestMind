@@ -453,3 +453,4 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
     </div>
   );
 };
+

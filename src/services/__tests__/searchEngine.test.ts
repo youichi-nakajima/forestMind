@@ -77,3 +77,4 @@ describe('FreeMindSearchEngine (FreeMindSearcher Features)', () => {
     expect(csv).toContain('資格・試験 > IT系 > Oracle Master');
   });
 });
+

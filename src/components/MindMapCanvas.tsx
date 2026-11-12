@@ -490,8 +490,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   </span>
                 )}
 
-                {/* Fold / Unfold Handle */}
-                {hasChildren && (
+                {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
+                {hasChildren && (!isRoot || node.folded) && (
                   <button
                     className={`fold-handle ${node.folded ? 'folded' : 'unfolded'}`}
                     title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}

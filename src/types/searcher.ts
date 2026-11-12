@@ -29,3 +29,4 @@ export interface ScannedFileItem {
   map: FreeMindMap;
   fileSize: number;
 }
+

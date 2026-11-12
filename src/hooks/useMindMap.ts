@@ -404,8 +404,9 @@ export function useMindMap() {
           pushHistory(parsed);
           setSelectedNodeId(parsed.root.id);
         }
-      } catch (err: any) {
-        alert('FreeMind XMLの読み込みに失敗しました:\n' + err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert('FreeMind XMLの読み込みに失敗しました:\n' + message);
       }
     },
     [createNewTab, pushHistory, setSelectedNodeId]

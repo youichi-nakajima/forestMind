@@ -36,6 +36,11 @@ interface FreeMindSearcherModalProps {
 type SortField = 'fileName' | 'relativePath' | 'breadcrumbPath' | 'nodeText' | 'modifiedTime';
 type SortOrder = 'asc' | 'desc';
 
+/** File System Access API (not yet in TypeScript's standard DOM lib) */
+type WindowWithDirectoryPicker = Window & {
+  showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+};
+
 export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
   isOpen,
   onClose,
@@ -73,7 +78,7 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
   const handlePickDirectory = async () => {
     if ('showDirectoryPicker' in window) {
       try {
-        const dirHandle = await (window as any).showDirectoryPicker();
+        const dirHandle = await (window as WindowWithDirectoryPicker).showDirectoryPicker();
         setScannedDirName(dirHandle.name);
         setIsScanning(true);
         setScanProgress({ count: 0, current: '探索開始...' });
@@ -89,10 +94,12 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
         const initialResults = executeFreeMindSearch(items, query);
         setResults(initialResults);
         setHasSearched(true);
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
+      } catch (err: unknown) {
+        const name = err instanceof Error ? err.name : '';
+        if (name !== 'AbortError') {
           console.error('Directory Picker Error:', err);
-          alert('フォルダの選択に失敗しました: ' + err.message);
+          const message = err instanceof Error ? err.message : String(err);
+          alert('フォルダの選択に失敗しました: ' + message);
         }
         setIsScanning(false);
       }
@@ -161,17 +168,14 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
   const sortedResults = useMemo(() => {
     const list = [...results];
     list.sort((a, b) => {
-      let valA: any = a[sortField];
-      let valB: any = b[sortField];
-
-      if (valA === undefined) valA = '';
-      if (valB === undefined) valB = '';
-
-      if (typeof valA === 'string') {
-        const cmp = valA.localeCompare(valB, 'ja');
-        return sortOrder === 'asc' ? cmp : -cmp;
+      if (sortField === 'modifiedTime') {
+        const timeA = a.modifiedTime ?? 0;
+        const timeB = b.modifiedTime ?? 0;
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
       }
-      return sortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+
+      const cmp = a[sortField].localeCompare(b[sortField], 'ja');
+      return sortOrder === 'asc' ? cmp : -cmp;
     });
     return list;
   }, [results, sortField, sortOrder]);
@@ -220,10 +224,7 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
             <input
               type="file"
               ref={fileInputRef}
-              // @ts-ignore
-              webkitdirectory="true"
-              // @ts-ignore
-              directory="true"
+              {...{ webkitdirectory: 'true', directory: 'true' }}
               multiple
               style={{ display: 'none' }}
               onChange={handleFallbackDirectoryInput}

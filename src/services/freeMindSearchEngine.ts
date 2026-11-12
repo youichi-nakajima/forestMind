@@ -42,12 +42,12 @@ export function formatTimestamp(ts?: number): string {
  * Recursively scan directory handle using File System Access API
  */
 export async function scanDirectoryHandle(
-  dirHandle: any,
+  dirHandle: FileSystemDirectoryHandle,
   onProgress?: (scannedCount: number, currentFile: string) => void
 ): Promise<ScannedFileItem[]> {
   const items: ScannedFileItem[] = [];
 
-  async function traverse(handle: any, currentPath: string) {
+  async function traverse(handle: FileSystemDirectoryHandle, currentPath: string) {
     for await (const entry of handle.values()) {
       if (entry.name.startsWith('.') || entry.name.startsWith('$')) {
         continue;
@@ -58,7 +58,7 @@ export async function scanDirectoryHandle(
       if (entry.kind === 'file') {
         if (entry.name.toLowerCase().endsWith('.mm')) {
           try {
-            const file = await entry.getFile();
+            const file = await (entry as FileSystemFileHandle).getFile();
             const text = await file.text();
             const map = parseFreeMindXml(text);
             items.push({
@@ -76,7 +76,7 @@ export async function scanDirectoryHandle(
           }
         }
       } else if (entry.kind === 'directory') {
-        await traverse(entry, relPath);
+        await traverse(entry as FileSystemDirectoryHandle, relPath);
       }
     }
   }
@@ -108,7 +108,7 @@ export async function scanFileList(
       const text = await file.text();
       const map = parseFreeMindXml(text);
 
-      const webkitPath = (file as any).webkitRelativePath || file.name;
+      const webkitPath = file.webkitRelativePath || file.name;
       const parts = webkitPath.split('/');
       const relFolder = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
 

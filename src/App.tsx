@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMindMap } from './hooks/useMindMap';
 import { usePresentationPlayback } from './hooks/usePresentationPlayback';
 import { TabBar } from './components/TabBar';
@@ -89,7 +89,7 @@ export const App: React.FC = () => {
   });
 
   // Toggle presentation via F5 or button
-  const handleTogglePresentation = () => {
+  const handleTogglePresentation = useCallback(() => {
     resumeAudioContext();
     if (isPresentationActive) {
       stopPresentation();
@@ -97,7 +97,7 @@ export const App: React.FC = () => {
       setIsForestViewOpen(false);
       startPresentation();
     }
-  };
+  }, [isPresentationActive, startPresentation, stopPresentation]);
 
   // Global F5 key listener
   useEffect(() => {
@@ -109,14 +109,16 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentationActive]);
+  }, [handleTogglePresentation]);
 
-  // Stop presentation on tab switch
+  // Stop presentation on tab switch (only when the active tab actually changes)
+  const prevActiveTabIdRef = useRef(activeTabId);
   useEffect(() => {
-    if (isPresentationActive) {
+    if (prevActiveTabIdRef.current !== activeTabId) {
+      prevActiveTabIdRef.current = activeTabId;
       stopPresentation();
     }
-  }, [activeTabId]);
+  }, [activeTabId, stopPresentation]);
 
   // Handler for jumping from FreeMindSearcher to map & node
   const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {

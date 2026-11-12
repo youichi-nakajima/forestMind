@@ -20,9 +20,13 @@ import {
   FileText,
   FolderSearch,
   PlayCircle,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface ToolbarProps {
+  isForestViewOpen?: boolean;
+  onCloseForestView?: () => void;
+  onNewTab?: () => void;
   onAddChild: () => void;
   onAddSibling: () => void;
   onDelete: () => void;
@@ -56,6 +60,9 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
+  isForestViewOpen = false,
+  onCloseForestView,
+  onNewTab,
   onAddChild,
   onAddSibling,
   onDelete,
@@ -111,6 +118,91 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     e.target.value = '';
   };
 
+  // =========================================================================
+  // Mode A: Forest Overview Toolbar (森林ビュー専用ツールバー)
+  // =========================================================================
+  if (isForestViewOpen) {
+    return (
+      <header className="toolbar forest-toolbar">
+        <div className="toolbar-section app-brand">
+          <span className="brand-icon">🌲</span>
+          <span className="brand-title">forestMind</span>
+          <span className="brand-badge forest-badge">森林ビュー</span>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        {/* Forest-wide actions */}
+        <div className="toolbar-group">
+          {onNewTab && (
+            <button
+              className="toolbar-btn primary-action-btn"
+              title="新しいマインドマップを作成"
+              onClick={onNewTab}
+            >
+              <Plus size={16} />
+              <span>新規マップ</span>
+            </button>
+          )}
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".mm,.xml,.md,.txt"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+          <button
+            className="toolbar-btn"
+            title="FreeMind (.mm) または Markdown (.md) ファイルを開いて森林に追加"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <FolderOpen size={16} />
+            <span>ファイルを開く</span>
+          </button>
+
+          <button
+            className="toolbar-btn searcher-trigger-btn"
+            title="PC上のフォルダ配下の全.mmファイルを再帰探索・検索 (FreeMindSearcher)"
+            onClick={onOpenSearcher}
+          >
+            <FolderSearch size={15} className="searcher-btn-icon" />
+            <span>フォルダ横断探索 (FreeMindSearcher)</span>
+          </button>
+        </div>
+
+        <div className="toolbar-spacer" />
+
+        {/* Back to Mindmap & Help */}
+        <div className="toolbar-group">
+          {onCloseForestView && (
+            <button
+              className="toolbar-btn secondary return-map-btn"
+              title="選択中のマインドマップ編集画面に戻る"
+              onClick={onCloseForestView}
+            >
+              <ArrowLeft size={16} />
+              <span>マップ編集に戻る</span>
+            </button>
+          )}
+
+          <div className="toolbar-divider" />
+
+          <button
+            className="toolbar-btn icon-only"
+            title="ショートカット操作ガイド"
+            onClick={onOpenHelp}
+          >
+            <HelpCircle size={16} />
+          </button>
+        </div>
+      </header>
+    );
+  }
+
+  // =========================================================================
+  // Mode B: Individual MindMap Toolbar (個別マインドマップ編集ツールバー)
+  // =========================================================================
   return (
     <header className="toolbar">
       <div className="toolbar-section app-brand">
@@ -136,7 +228,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           onClick={() => fileInputRef.current?.click()}
         >
           <FolderOpen size={16} />
-          <span>開く (.mm / .md)</span>
+          <span>開く</span>
         </button>
 
         <div className="export-dropdown-wrapper">
@@ -146,7 +238,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             onClick={() => setShowExportMenu(prev => !prev)}
           >
             <Download size={16} />
-            <span>保存 / 出力 ▾</span>
+            <span>保存 ▾</span>
           </button>
           {showExportMenu && (
             <div className="export-menu" onClick={() => setShowExportMenu(false)}>
@@ -246,7 +338,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="toolbar-divider" />
 
-      {/* Search */}
+      {/* Presentation Playback (Mindmap Growth Animation) */}
+      {onTogglePresentation && (
+        <div className="toolbar-group">
+          <button
+            className={`toolbar-btn presentation-trigger-btn ${
+              isPresentationActive ? 'active' : ''
+            }`}
+            title="思考の成長・プレゼンテーション自動再生 (F5)"
+            onClick={onTogglePresentation}
+          >
+            <PlayCircle size={15} className="presentation-btn-icon" />
+            <span>思考再生 (F5)</span>
+          </button>
+        </div>
+      )}
+
+      <div className="toolbar-divider" />
+
+      {/* Search in Map */}
       <div className="toolbar-search-group">
         <Search size={14} className="search-icon" />
         <input
@@ -293,27 +403,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
+      {/* Folder Search trigger icon on map toolbar */}
       <button
-        className="toolbar-btn searcher-trigger-btn"
+        className="toolbar-btn icon-only"
         title="PC上のフォルダ配下の全.mmファイルを再帰探索・検索 (FreeMindSearcher)"
         onClick={onOpenSearcher}
       >
-        <FolderSearch size={15} className="searcher-btn-icon" />
-        <span>フォルダ横断検索</span>
+        <FolderSearch size={16} />
       </button>
-
-      {onTogglePresentation && (
-        <button
-          className={`toolbar-btn presentation-trigger-btn ${
-            isPresentationActive ? 'active' : ''
-          }`}
-          title="思考の成長・プレゼンテーション自動再生 (F5)"
-          onClick={onTogglePresentation}
-        >
-          <PlayCircle size={15} className="presentation-btn-icon" />
-          <span>思考再生 (F5)</span>
-        </button>
-      )}
 
       <div className="toolbar-spacer" />
 

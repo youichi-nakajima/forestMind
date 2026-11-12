@@ -183,6 +183,12 @@ export const App: React.FC = () => {
     <div className="app-container">
       {/* Top Toolbar */}
       <Toolbar
+        isForestViewOpen={isForestViewOpen}
+        onCloseForestView={() => setIsForestViewOpen(false)}
+        onNewTab={() => {
+          createNewTab();
+          setIsForestViewOpen(false);
+        }}
         onAddChild={() => selectedNodeId && addChildNode(selectedNodeId)}
         onAddSibling={() => selectedNodeId && addSiblingNode(selectedNodeId)}
         onDelete={() => selectedNodeId && deleteNode(selectedNodeId)}

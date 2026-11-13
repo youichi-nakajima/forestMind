@@ -13,6 +13,8 @@ export interface MapTab {
   past: FreeMindMap[];
   future: FreeMindMap[];
   selectedNodeId: string | null;
+  isDirty?: boolean;
+  savedPastLength?: number;
 }
 
 const STORAGE_KEY_TABS = 'forestmind_saved_tabs_v2';
@@ -23,10 +25,17 @@ export function useMindMap() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TABS);
       if (saved) {
-        const parsed = JSON.parse(saved) as { id: string; title: string; filePath?: string; xml: string }[];
+        const parsed = JSON.parse(saved) as {
+          id: string;
+          title: string;
+          filePath?: string;
+          isDirty?: boolean;
+          xml: string;
+        }[];
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(t => {
             const mapObj = parseFreeMindXml(t.xml);
+            const dirty = Boolean(t.isDirty);
             return {
               id: t.id,
               title: t.title || mapObj.root.text || '無題マップ',
@@ -35,6 +44,8 @@ export function useMindMap() {
               past: [],
               future: [],
               selectedNodeId: mapObj.root.id,
+              isDirty: dirty,
+              savedPastLength: dirty ? undefined : 0,
             };
           });
         }
@@ -51,6 +62,8 @@ export function useMindMap() {
         past: [],
         future: [],
         selectedNodeId: initialFreeMindMap.root.id,
+        isDirty: false,
+        savedPastLength: 0,
       },
     ];
   });
@@ -79,6 +92,7 @@ export function useMindMap() {
         id: t.id,
         title: t.map.root.text || t.title,
         filePath: t.filePath,
+        isDirty: Boolean(t.isDirty),
         xml: serializeFreeMindXml(t.map),
       }));
       localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(serializedTabs));
@@ -89,40 +103,60 @@ export function useMindMap() {
   }, [tabs, activeTabId]);
 
   // Tab operations
-  const createNewTab = useCallback((customMap?: FreeMindMap, title?: string, filePath?: string) => {
-    const newId = `tab_${Date.now()}`;
-    const newMap: FreeMindMap = customMap || {
-      version: '1.0.1',
-      root: {
-        id: generateNodeId(),
-        text: title || '新規マインドマップ',
-        style: 'bubble',
-        font: { size: 16, bold: true },
-        icons: [],
-        attributes: [],
-        arrowLinks: [],
-        hooks: [],
-        children: [],
-      },
-    };
+  const createNewTab = useCallback(
+    (customMap?: FreeMindMap, title?: string, filePath?: string, initialDirty: boolean = false) => {
+      const newId = `tab_${Date.now()}`;
+      const newMap: FreeMindMap = customMap || {
+        version: '1.0.1',
+        root: {
+          id: generateNodeId(),
+          text: title || '新規マインドマップ',
+          style: 'bubble',
+          font: { size: 16, bold: true },
+          icons: [],
+          attributes: [],
+          arrowLinks: [],
+          hooks: [],
+          children: [],
+        },
+      };
 
-    const newTab: MapTab = {
-      id: newId,
-      title: newMap.root.text || title || '新規マップ',
-      filePath,
-      map: newMap,
-      past: [],
-      future: [],
-      selectedNodeId: newMap.root.id,
-    };
+      const newTab: MapTab = {
+        id: newId,
+        title: newMap.root.text || title || '新規マップ',
+        filePath,
+        map: newMap,
+        past: [],
+        future: [],
+        selectedNodeId: newMap.root.id,
+        isDirty: initialDirty,
+        savedPastLength: initialDirty ? undefined : 0,
+      };
 
-    setTabs(prev => [...prev, newTab]);
-    setActiveTabId(newId);
-    setEditingNodeId(null);
-  }, []);
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(newId);
+      setEditingNodeId(null);
+    },
+    []
+  );
 
   const setTabFilePath = useCallback((tabId: string, filePath: string) => {
     setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, filePath } : t)));
+  }, []);
+
+  const markTabSaved = useCallback((tabId: string, filePath?: string) => {
+    setTabs(prev =>
+      prev.map(t =>
+        t.id === tabId
+          ? {
+              ...t,
+              filePath: filePath ?? t.filePath,
+              isDirty: false,
+              savedPastLength: t.past.length,
+            }
+          : t
+      )
+    );
   }, []);
 
   const openFileInTab = useCallback(
@@ -191,12 +225,25 @@ export function useMindMap() {
       setTabs(prev =>
         prev.map(t => {
           if (t.id !== activeTabId) return t;
+          const dropped = t.past.length >= 31 ? 1 : 0;
+          const nextPast = [...t.past.slice(-30), t.map];
+          let nextSavedPastLen = t.savedPastLength;
+          if (nextSavedPastLen !== undefined) {
+            if (t.past.length < nextSavedPastLen) {
+              nextSavedPastLen = undefined;
+            } else if (dropped > 0) {
+              nextSavedPastLen = nextSavedPastLen - 1;
+              if (nextSavedPastLen < 0) nextSavedPastLen = undefined;
+            }
+          }
           return {
             ...t,
             title: newMap.root.text || t.title,
-            past: [...t.past.slice(-30), t.map],
+            past: nextPast,
             future: [],
             map: newMap,
+            isDirty: nextSavedPastLen === undefined || nextPast.length !== nextSavedPastLen,
+            savedPastLength: nextSavedPastLen,
           };
         })
       );
@@ -209,12 +256,14 @@ export function useMindMap() {
       prev.map(t => {
         if (t.id !== activeTabId || t.past.length === 0) return t;
         const previous = t.past[t.past.length - 1];
+        const nextPast = t.past.slice(0, t.past.length - 1);
         return {
           ...t,
-          past: t.past.slice(0, t.past.length - 1),
+          past: nextPast,
           future: [t.map, ...t.future],
           map: previous,
           title: previous.root.text || t.title,
+          isDirty: t.savedPastLength === undefined || nextPast.length !== t.savedPastLength,
         };
       })
     );
@@ -225,12 +274,14 @@ export function useMindMap() {
       prev.map(t => {
         if (t.id !== activeTabId || t.future.length === 0) return t;
         const next = t.future[0];
+        const nextPast = [...t.past, t.map];
         return {
           ...t,
-          past: [...t.past, t.map],
+          past: nextPast,
           future: t.future.slice(1),
           map: next,
           title: next.root.text || t.title,
+          isDirty: t.savedPastLength === undefined || nextPast.length !== t.savedPastLength,
         };
       })
     );
@@ -655,7 +706,7 @@ export function useMindMap() {
       try {
         const parsed = parseFreeMindXml(xmlString);
         if (asNewTab) {
-          createNewTab(parsed, parsed.root.text);
+          createNewTab(parsed, parsed.root.text, undefined, true);
         } else {
           pushHistory(parsed);
           setSelectedNodeId(parsed.root.id);
@@ -676,6 +727,14 @@ export function useMindMap() {
   const exportXml = useCallback(() => {
     return serializeFreeMindXml(map);
   }, [map]);
+
+  const exportTabXml = useCallback(
+    (tabId: string) => {
+      const target = tabs.find(t => t.id === tabId);
+      return target ? serializeFreeMindXml(target.map) : serializeFreeMindXml(map);
+    },
+    [tabs, map]
+  );
 
   const importMarkdown = useCallback(
     (markdownText: string, asNewTab: boolean = true) => {
@@ -758,7 +817,7 @@ export function useMindMap() {
       };
 
       if (asNewTab) {
-        createNewTab(newMap, rootTitle);
+        createNewTab(newMap, rootTitle, undefined, true);
       } else {
         pushHistory(newMap);
         setSelectedNodeId(newMap.root.id);
@@ -844,6 +903,7 @@ export function useMindMap() {
     setActiveTabId,
     createNewTab,
     setTabFilePath,
+    markTabSaved,
     openFileInTab,
     closeTab,
     map,
@@ -873,6 +933,7 @@ export function useMindMap() {
     importMarkdown,
     resetToDefault,
     exportXml,
+    exportTabXml,
     exportMarkdown,
     searchQuery,
     setSearchQuery,

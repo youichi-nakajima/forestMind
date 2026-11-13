@@ -37,6 +37,7 @@ export const TabBar: React.FC<TabBarProps> = ({
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId && !isForestViewOpen;
           const title = tab.map.root.text || tab.title || '無題マップ';
+          const isDirty = Boolean(tab.isDirty);
           return (
             <div
               key={tab.id}
@@ -44,9 +45,14 @@ export const TabBar: React.FC<TabBarProps> = ({
               onClick={() => onSelectTab(tab.id)}
             >
               <FileSpreadsheet size={13} className="tab-icon" />
-              <span className="tab-title" title={title}>
+              <span className="tab-title" title={isDirty ? `${title} (未保存)` : title}>
                 {title}
               </span>
+              {isDirty && (
+                <span className="tab-dirty" title="未保存の変更があります" aria-label="未保存">
+                  *
+                </span>
+              )}
               {tabs.length > 1 && (
                 <button
                   className="tab-close-btn"

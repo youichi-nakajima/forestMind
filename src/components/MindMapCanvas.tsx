@@ -157,13 +157,20 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     }));
   }, [isPresentationActive, autoCenter, activeNodeId, layoutNodes, zoomScale, setPanOffset]);
 
+  const initializedEditIdRef = useRef<string | null>(null);
+
   // Sync editing text when editing starts
   useEffect(() => {
-    if (editingNodeId) {
-      const target = layoutNodes.get(editingNodeId);
-      if (target) {
-        setEditingText(target.node.text || '');
-      }
+    if (!editingNodeId) {
+      initializedEditIdRef.current = null;
+      return;
+    }
+    if (initializedEditIdRef.current === editingNodeId) return;
+    const target = layoutNodes.get(editingNodeId);
+    if (target) {
+      initializedEditIdRef.current = editingNodeId;
+      const rawText = target.node.text || '';
+      setEditingText(rawText === '新規ノード' ? '' : rawText);
     }
   }, [editingNodeId, layoutNodes]);
 

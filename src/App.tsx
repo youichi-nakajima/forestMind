@@ -21,7 +21,7 @@ export const App: React.FC = () => {
     activeFilePath,
     setActiveTabId,
     createNewTab,
-    setTabFilePath,
+    markTabSaved,
     openFileInTab,
     closeTab,
     map,
@@ -51,6 +51,7 @@ export const App: React.FC = () => {
     importMarkdown,
     resetToDefault,
     exportXml,
+    exportTabXml,
     exportMarkdown,
     searchQuery,
     setSearchQuery,
@@ -299,6 +300,7 @@ export const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    markTabSaved(activeTabId);
   };
 
   // Export Markdown (.md) download
@@ -345,38 +347,131 @@ export const App: React.FC = () => {
     });
   }, [openFileInTab]);
 
-  const handleSaveCurrentFile = useCallback(async () => {
-    const api = window.electronAPI;
-    const xml = exportXml();
-    if (!api) {
-      const blob = new Blob([xml], { type: 'application/x-freemind;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${map.root.text || 'mindmap'}.mm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
+  const saveTabById = useCallback(
+    async (tabId: string): Promise<boolean> => {
+      const targetTab = tabs.find(t => t.id === tabId);
+      if (!targetTab) return false;
 
-    if (activeFilePath) {
-      const res = await api.saveFile(activeFilePath, xml);
-      if (res.ok) {
-        showToast(`上書き保存しました: ${activeFilePath.split(/[\\/]/).pop()}`);
-      } else {
-        showToast(`保存に失敗しました: ${res.error || ''}`);
+      const api = window.electronAPI;
+      const xml = exportTabXml(tabId);
+      const fallbackTitle = targetTab.map.root.text || targetTab.title || 'mindmap';
+
+      if (!api) {
+        const blob = new Blob([xml], { type: 'application/x-freemind;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${fallbackTitle}.mm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        markTabSaved(tabId);
+        return true;
       }
-      return;
-    }
 
-    const res = await api.saveMmFileDialog(map.root.text || 'mindmap', xml);
-    if (!res.canceled && res.filePath) {
-      setTabFilePath(activeTabId, res.filePath);
-      showToast(`保存しました: ${res.fileName || res.filePath}`);
-    }
-  }, [exportXml, map.root.text, activeFilePath, setTabFilePath, activeTabId, showToast]);
+      if (targetTab.filePath) {
+        const res = await api.saveFile(targetTab.filePath, xml);
+        if (res.ok) {
+          markTabSaved(tabId, targetTab.filePath);
+          showToast(`上書き保存しました: ${targetTab.filePath.split(/[\\/]/).pop()}`);
+          return true;
+        }
+        showToast(`保存に失敗しました: ${res.error || ''}`);
+        return false;
+      }
+
+      const res = await api.saveMmFileDialog(fallbackTitle, xml);
+      if (!res.canceled && res.filePath) {
+        markTabSaved(tabId, res.filePath);
+        showToast(`保存しました: ${res.fileName || res.filePath}`);
+        return true;
+      }
+      return false;
+    },
+    [tabs, exportTabXml, markTabSaved, showToast]
+  );
+
+  const handleSaveCurrentFile = useCallback(async () => {
+    await saveTabById(activeTabId);
+  }, [saveTabById, activeTabId]);
+
+  const handleCloseTab = useCallback(
+    async (tabId: string) => {
+      if (tabs.length <= 1) {
+        closeTab(tabId);
+        return;
+      }
+      const targetTab = tabs.find(t => t.id === tabId);
+      if (targetTab?.isDirty) {
+        const tabTitle = targetTab.map.root.text || targetTab.title || '無題マップ';
+        const api = window.electronAPI;
+        if (api?.confirmUnsaved) {
+          const choice = await api.confirmUnsaved(tabTitle);
+          if (choice === 'cancel') return;
+          if (choice === 'save') {
+            const saved = await saveTabById(tabId);
+            if (!saved) return;
+          }
+        } else {
+          const ok = window.confirm(`「${tabTitle}」には未保存の変更があります。保存せずに閉じますか？`);
+          if (!ok) return;
+        }
+      }
+      closeTab(tabId);
+    },
+    [tabs, closeTab, saveTabById]
+  );
+
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const saveTabByIdRef = useRef(saveTabById);
+  saveTabByIdRef.current = saveTabById;
+  const isClosingPromptRef = useRef(false);
+
+  // Electron: confirm unsaved tabs before closing window
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onRequestClose) return;
+
+    return api.onRequestClose(async () => {
+      if (isClosingPromptRef.current) return;
+      isClosingPromptRef.current = true;
+      try {
+        const dirtyTabs = tabsRef.current.filter(t => t.isDirty);
+        for (const tab of dirtyTabs) {
+          const tabTitle = tab.map.root.text || tab.title || '無題マップ';
+          const choice = await api.confirmUnsaved(tabTitle);
+          if (choice === 'cancel') {
+            return;
+          }
+          if (choice === 'save') {
+            setActiveTabId(tab.id);
+            const saved = await saveTabByIdRef.current(tab.id);
+            if (!saved) {
+              return;
+            }
+          }
+        }
+        api.confirmAppClose();
+      } finally {
+        isClosingPromptRef.current = false;
+      }
+    });
+  }, [setActiveTabId]);
+
+  // Web browser: warn before leaving with unsaved changes
+  useEffect(() => {
+    if (window.electronAPI) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (tabs.some(t => t.isDirty)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tabs]);
 
   useEffect(() => {
     const handleSaveKey = (e: KeyboardEvent) => {
@@ -478,7 +573,7 @@ export const App: React.FC = () => {
           setActiveTabId(id);
           setIsForestViewOpen(false);
         }}
-        onCloseTab={closeTab}
+        onCloseTab={handleCloseTab}
         onNewTab={() => {
           createNewTab();
           setIsForestViewOpen(false);

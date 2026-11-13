@@ -37,6 +37,9 @@ export interface ElectronAPI {
     baseFilePath?: string
   ) => Promise<ElectronSaveDialogResult>;
   pickTargetMmFile: (baseFilePath?: string) => Promise<ElectronPickLinkResult | null>;
+  confirmUnsaved: (title: string) => Promise<'save' | 'discard' | 'cancel'>;
+  onRequestClose: (callback: () => void) => () => void;
+  confirmAppClose: () => void;
 }
 
 declare global {

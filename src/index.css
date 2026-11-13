@@ -267,6 +267,14 @@ body {
   white-space: nowrap;
 }
 
+.tab-dirty {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: #ea580c;
+  margin-left: -2px;
+  line-height: 1;
+}
+
 .tab-icon {
   opacity: 0.7;
 }

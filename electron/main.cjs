@@ -5,6 +5,7 @@ const { fileURLToPath } = require('node:url');
 
 let mainWindow = null;
 let initialFilePath = null;
+let isForceClosing = false;
 
 function extractMmArg(argv) {
   for (const arg of argv) {
@@ -76,8 +77,20 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
+  mainWindow.on('close', e => {
+    if (!isForceClosing && mainWindow && !mainWindow.isDestroyed()) {
+      e.preventDefault();
+      mainWindow.webContents.send('app:requestClose');
+    }
+  });
+
+  mainWindow.webContents.on('render-process-gone', () => {
+    isForceClosing = true;
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
+    isForceClosing = false;
   });
 }
 
@@ -220,6 +233,30 @@ app.whenReady().then(() => {
       filePath: pickedPath,
       linkValue,
     };
+  });
+
+  ipcMain.handle('dialog:confirmUnsaved', async (_event, title) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return 'discard';
+    const res = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: '未保存の変更',
+      message: `「${title || '無題マップ'}」には未保存の変更があります。`,
+      detail: '閉じる前に変更を保存しますか？',
+      buttons: ['保存する', '保存しない', 'キャンセル'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    if (res.response === 0) return 'save';
+    if (res.response === 1) return 'discard';
+    return 'cancel';
+  });
+
+  ipcMain.on('app:confirmClose', () => {
+    isForceClosing = true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.close();
+    }
   });
 
   createWindow();

@@ -2449,3 +2449,48 @@ body {
 .app-container.theme-dark .zoom-text {
   color: #cbd5e1;
 }
+
+.app-container.theme-dark .mindmap-cloud {
+  fill-opacity: 0.28;
+  stroke-opacity: 0.9;
+}
+
+/* ==========================================================================
+   Fluffy Cloud & Nested Cloud Styles
+   ========================================================================== */
+.mindmap-cloud {
+  filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.08));
+  transition: fill 0.2s ease, stroke 0.2s ease, opacity 0.3s ease;
+}
+
+.mindmap-cloud-nested {
+  filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.14));
+}
+
+.cloud-color-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.cloud-swatch-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(15, 23, 42, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cloud-swatch-btn:hover {
+  transform: scale(1.12);
+}
+
+.cloud-swatch-btn.active {
+  outline: 2px solid #059669;
+  outline-offset: 2px;
+  transform: scale(1.08);
+}

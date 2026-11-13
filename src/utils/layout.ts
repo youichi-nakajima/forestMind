@@ -36,11 +36,24 @@ export interface RenderArrowLink {
 export interface RenderCloud {
   id: string;
   color: string;
+  strokeColor: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  d: string;
+  depth: number;
+  nestingLevel: number;
 }
+
+export const CLOUD_PALETTE = [
+  '#e0f2fe', // Sky blue
+  '#fef3c7', // Warm amber
+  '#dcfce7', // Mint green
+  '#fce7f3', // Soft pink
+  '#ede9fe', // Lavender purple
+  '#ffedd5', // Peach orange
+];
 
 const HORIZONTAL_GAP = 68;
 const VERTICAL_GAP = 16;
@@ -215,48 +228,251 @@ export function computeLayout(rootNode: FreeMindNode): {
         }
       }
     }
-
-    // Compute Cloud bounds if node has cloud
-    if (lNode.node.cloud) {
-      const bounds = getSubtreeBounds(lNode);
-      clouds.push({
-        id: lNode.id,
-        color: lNode.node.cloud.color || '#f1f5f9',
-        x: bounds.minX - 16,
-        y: bounds.minY - 12,
-        width: bounds.maxX - bounds.minX + 32,
-        height: bounds.maxY - bounds.minY + 24,
-      });
-    }
   }
+
+  // Compute Clouds bottom-up so outer clouds properly enclose inner clouds
+  computeNodeBoundsAndClouds(rootLayout, [], clouds);
+  clouds.sort((a, b) => a.nestingLevel - b.nestingLevel || a.depth - b.depth);
 
   return { layoutNodes: layoutMap, edges, arrowLinks, clouds };
 }
 
-function getSubtreeBounds(layoutNode: LayoutNode): { minX: number; maxX: number; minY: number; maxY: number } {
-  let minX = layoutNode.x - layoutNode.width / 2;
-  let maxX = layoutNode.x + layoutNode.width / 2;
-  let minY = layoutNode.y - layoutNode.height / 2;
-  let maxY = layoutNode.y + layoutNode.height / 2;
+/**
+ * Derive a darker, saturated border stroke color from a cloud fill hex color.
+ */
+function deriveCloudStrokeColor(hexColor: string): string {
+  const match = hexColor.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return '#64748b';
 
-  function traverse(n: LayoutNode) {
-    const nx1 = n.x - n.width / 2;
-    const nx2 = n.x + n.width / 2;
-    const ny1 = n.y - n.height / 2;
-    const ny2 = n.y + n.height / 2;
+  let hex = match[1];
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map(ch => ch + ch)
+      .join('');
+  }
 
-    minX = Math.min(minX, nx1);
-    maxX = Math.max(maxX, nx2);
-    minY = Math.min(minY, ny1);
-    maxY = Math.max(maxY, ny2);
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
 
-    for (const c of n.children) {
-      traverse(c);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) {
+      h = ((g - b) / d) % 6;
+    } else if (max === g) {
+      h = (b - r) / d + 2;
+    } else {
+      h = (r - g) / d + 4;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+
+  const strokeS = s < 0.1 ? s : Math.max(s, 0.55);
+  const strokeL = Math.min(l * 0.52, 0.44);
+
+  return `hsl(${Math.round(h)}, ${Math.round(strokeS * 100)}%, ${Math.round(strokeL * 100)}%)`;
+}
+
+/**
+ * Generate a fluffy, scalloped SVG cloud path around a bounding box.
+ */
+export function generateCloudPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  nestingLevel: number = 0
+): string {
+  const r = Math.min(28, width / 3.5, height / 3.5);
+  const wEdge = Math.max(0, width - 2 * r);
+  const hEdge = Math.max(0, height - 2 * r);
+  const arcLen = (Math.PI * r) / 2;
+  const totalLen = 2 * wEdge + 2 * hEdge + 4 * arcLen;
+
+  if (totalLen <= 0) return '';
+
+  const samplePerimeter = (s: number): { px: number; py: number; nx: number; ny: number } => {
+    let d = ((s % totalLen) + totalLen) % totalLen;
+
+    // 1. Top edge (left -> right)
+    if (d < wEdge) {
+      return { px: x + r + d, py: y, nx: 0, ny: -1 };
+    }
+    d -= wEdge;
+
+    // 2. Top-right corner
+    if (d < arcLen && r > 0) {
+      const theta = -Math.PI / 2 + d / r;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      return { px: x + width - r + r * cos, py: y + r + r * sin, nx: cos, ny: sin };
+    }
+    d -= arcLen;
+
+    // 3. Right edge (top -> bottom)
+    if (d < hEdge) {
+      return { px: x + width, py: y + r + d, nx: 1, ny: 0 };
+    }
+    d -= hEdge;
+
+    // 4. Bottom-right corner
+    if (d < arcLen && r > 0) {
+      const theta = d / r;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      return { px: x + width - r + r * cos, py: y + height - r + r * sin, nx: cos, ny: sin };
+    }
+    d -= arcLen;
+
+    // 5. Bottom edge (right -> left)
+    if (d < wEdge) {
+      return { px: x + width - r - d, py: y + height, nx: 0, ny: 1 };
+    }
+    d -= wEdge;
+
+    // 6. Bottom-left corner
+    if (d < arcLen && r > 0) {
+      const theta = Math.PI / 2 + d / r;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      return { px: x + r + r * cos, py: y + height - r + r * sin, nx: cos, ny: sin };
+    }
+    d -= arcLen;
+
+    // 7. Left edge (bottom -> top)
+    if (d < hEdge) {
+      return { px: x, py: y + height - r - d, nx: -1, ny: 0 };
+    }
+    d -= hEdge;
+
+    // 8. Top-left corner
+    if (r > 0) {
+      const theta = Math.PI + d / r;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      return { px: x + r + r * cos, py: y + r + r * sin, nx: cos, ny: sin };
+    }
+
+    return { px: x + r, py: y, nx: 0, ny: -1 };
+  };
+
+  const numPuffs = Math.max(8, Math.round(totalLen / 38));
+  const rawWeights: number[] = [];
+  let weightSum = 0;
+  for (let i = 0; i < numPuffs; i++) {
+    const w = 1 + 0.16 * Math.sin(i * 2.1 + nestingLevel * 1.7);
+    rawWeights.push(w);
+    weightSum += w;
+  }
+
+  const segLengths = rawWeights.map(w => (w / weightSum) * totalLen);
+  const startPoint = samplePerimeter(0);
+  const parts: string[] = [`M ${startPoint.px.toFixed(2)} ${startPoint.py.toFixed(2)}`];
+
+  let s0 = 0;
+  for (let i = 0; i < numPuffs; i++) {
+    const L = segLengths[i];
+    const s1 = s0 + L;
+    const p0 = samplePerimeter(s0);
+    const p1 = i === numPuffs - 1 ? startPoint : samplePerimeter(s1);
+    const n0 = samplePerimeter(s0 + 0.22 * L);
+    const n1 = samplePerimeter(s0 + 0.78 * L);
+    const h = Math.min(Math.max(L * 0.34, 9), 16);
+
+    const dx = p1.px - p0.px;
+    const dy = p1.py - p0.py;
+    const c1x = p0.px + 0.18 * dx + h * n0.nx;
+    const c1y = p0.py + 0.18 * dy + h * n0.ny;
+    const c2x = p0.px + 0.82 * dx + h * n1.nx;
+    const c2y = p0.py + 0.82 * dy + h * n1.ny;
+
+    parts.push(
+      `C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p1.px.toFixed(2)} ${p1.py.toFixed(2)}`
+    );
+    s0 = s1;
+  }
+
+  parts.push('Z');
+  return parts.join(' ');
+}
+
+function computeNodeBoundsAndClouds(
+  lNode: LayoutNode,
+  ancestorCloudColors: string[],
+  clouds: RenderCloud[]
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = lNode.x - lNode.width / 2;
+  let maxX = lNode.x + lNode.width / 2;
+  let minY = lNode.y - lNode.height / 2;
+  let maxY = lNode.y + lNode.height / 2;
+
+  const hasCloud = Boolean(lNode.node.cloud);
+  const nestingLevel = ancestorCloudColors.length;
+
+  let effectiveColor = lNode.node.cloud?.color || CLOUD_PALETTE[0];
+  if (hasCloud && nestingLevel > 0) {
+    const normalizedAncestors = ancestorCloudColors.map(c => c.toLowerCase());
+    if (normalizedAncestors.includes(effectiveColor.toLowerCase())) {
+      const startIdx = nestingLevel % CLOUD_PALETTE.length;
+      for (let offset = 0; offset < CLOUD_PALETTE.length; offset++) {
+        const candidate = CLOUD_PALETTE[(startIdx + offset) % CLOUD_PALETTE.length];
+        if (!normalizedAncestors.includes(candidate.toLowerCase())) {
+          effectiveColor = candidate;
+          break;
+        }
+      }
+      if (normalizedAncestors.includes(effectiveColor.toLowerCase())) {
+        effectiveColor = CLOUD_PALETTE[startIdx];
+      }
     }
   }
 
-  for (const c of layoutNode.children) {
-    traverse(c);
+  const nextAncestorColors = hasCloud
+    ? [...ancestorCloudColors, effectiveColor]
+    : ancestorCloudColors;
+
+  for (const child of lNode.children) {
+    const childBounds = computeNodeBoundsAndClouds(child, nextAncestorColors, clouds);
+    minX = Math.min(minX, childBounds.minX);
+    maxX = Math.max(maxX, childBounds.maxX);
+    minY = Math.min(minY, childBounds.minY);
+    maxY = Math.max(maxY, childBounds.maxY);
+  }
+
+  if (hasCloud) {
+    const padX = 22;
+    const padY = 18;
+    const cx = minX - padX;
+    const cy = minY - padY;
+    const cw = maxX - minX + padX * 2;
+    const ch = maxY - minY + padY * 2;
+
+    clouds.push({
+      id: lNode.id,
+      color: effectiveColor,
+      strokeColor: deriveCloudStrokeColor(effectiveColor),
+      x: cx,
+      y: cy,
+      width: cw,
+      height: ch,
+      d: generateCloudPath(cx, cy, cw, ch, nestingLevel),
+      depth: lNode.depth,
+      nestingLevel,
+    });
+
+    // Expand outer bounds so enclosing ancestor clouds wrap outside inner clouds
+    minX = cx - 8;
+    maxX = cx + cw + 8;
+    minY = cy - 8;
+    maxY = cy + ch + 8;
   }
 
   return { minX, maxX, minY, maxY };
@@ -268,8 +484,10 @@ interface SubtreeSize {
 
 function calculateSubtreeHeight(node: FreeMindNode): SubtreeSize {
   const dim = estimateNodeDimensions(node);
+  const cloudPadding = node.cloud ? 36 : 0;
+
   if (node.folded || node.children.length === 0) {
-    return { totalHeight: dim.height };
+    return { totalHeight: dim.height + cloudPadding };
   }
 
   let childrenHeight = 0;
@@ -279,7 +497,7 @@ function calculateSubtreeHeight(node: FreeMindNode): SubtreeSize {
   }
   childrenHeight -= VERTICAL_GAP; // remove last gap
 
-  return { totalHeight: Math.max(dim.height, childrenHeight) };
+  return { totalHeight: Math.max(dim.height, childrenHeight) + cloudPadding };
 }
 
 function layoutBranch(

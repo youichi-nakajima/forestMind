@@ -398,20 +398,19 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               const isDimmedCloud =
                 isPresentationActive && isSpotlightEnabled && spotlightNodeIds && !spotlightNodeIds.has(c.id);
               return (
-                <rect
+                <path
                   key={c.id}
-                  x={c.x}
-                  y={c.y}
-                  width={c.width}
-                  height={c.height}
-                  rx="18"
-                  ry="18"
+                  d={c.d}
                   fill={c.color}
-                  opacity={isDimmedCloud ? '0.1' : '0.4'}
-                  stroke={c.color}
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  className={`mindmap-cloud ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
+                  fillOpacity={isDimmedCloud ? 0.12 : 0.55}
+                  stroke={c.strokeColor}
+                  strokeOpacity={isDimmedCloud ? 0.2 : 0.85}
+                  strokeWidth={c.nestingLevel > 0 ? 2.2 : 2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  className={`mindmap-cloud ${
+                    c.nestingLevel > 0 ? `mindmap-cloud-nested level-${c.nestingLevel}` : ''
+                  } ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
                 />
               );
             })}

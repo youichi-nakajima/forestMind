@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FreeMindNode, NodeStyle, FreeMindMap } from '../types/freemind';
+import { CLOUD_PALETTE } from '../utils/layout';
 import {
   Palette,
   Type,
@@ -57,6 +58,8 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
     for (const c of n.children) collectNodes(c);
   }
   collectNodes(map.root);
+
+  const ancestorCloudCount = Math.max(0, countAncestorClouds(map.root, node.id));
 
   const handleToggleIcon = (iconId: string) => {
     const existing = node.icons.some(i => i.builtin === iconId);
@@ -255,7 +258,8 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
                 checked={Boolean(node.cloud)}
                 onChange={e => {
                   if (e.target.checked) {
-                    onUpdate({ cloud: { color: '#e0f2fe' } });
+                    const defaultColor = CLOUD_PALETTE[ancestorCloudCount % CLOUD_PALETTE.length];
+                    onUpdate({ cloud: { color: defaultColor } });
                   } else {
                     onUpdate({ cloud: undefined });
                   }
@@ -267,11 +271,29 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
               <input
                 type="color"
                 className="color-picker-input"
-                value={node.cloud.color || '#e0f2fe'}
+                value={node.cloud.color || CLOUD_PALETTE[0]}
                 onChange={e => onUpdate({ cloud: { color: e.target.value } })}
               />
             )}
           </div>
+          {node.cloud && (
+            <div className="cloud-color-swatches">
+              {CLOUD_PALETTE.map(swatchColor => {
+                const isActive =
+                  (node.cloud?.color || CLOUD_PALETTE[0]).toLowerCase() === swatchColor.toLowerCase();
+                return (
+                  <button
+                    key={swatchColor}
+                    type="button"
+                    className={`cloud-swatch-btn ${isActive ? 'active' : ''}`}
+                    style={{ backgroundColor: swatchColor }}
+                    title={swatchColor}
+                    onClick={() => onUpdate({ cloud: { color: swatchColor } })}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Arrow Links (関連矢印) */}
@@ -412,4 +434,14 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
     </aside>
   );
 };
+
+function countAncestorClouds(curr: FreeMindNode, targetId: string, cloudCount = 0): number {
+  if (curr.id === targetId) return cloudCount;
+  const nextCount = curr.cloud ? cloudCount + 1 : cloudCount;
+  for (const child of curr.children) {
+    const found = countAncestorClouds(child, targetId, nextCount);
+    if (found !== -1) return found;
+  }
+  return -1;
+}
 

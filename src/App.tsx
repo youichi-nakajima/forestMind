@@ -18,8 +18,11 @@ export const App: React.FC = () => {
   const {
     tabs,
     activeTabId,
+    activeFilePath,
     setActiveTabId,
     createNewTab,
+    setTabFilePath,
+    openFileInTab,
     closeTab,
     map,
     selectedNodeId,
@@ -326,6 +329,91 @@ export const App: React.FC = () => {
     }
   };
 
+  // Electron desktop integration: open initial/second-instance file, Ctrl+S save, file link navigation
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api) return;
+
+    api.getInitialFile().then(payload => {
+      if (payload) {
+        openFileInTab(payload.filePath, payload.content, payload.fileName);
+      }
+    });
+
+    return api.onOpenFile(payload => {
+      openFileInTab(payload.filePath, payload.content, payload.fileName);
+    });
+  }, [openFileInTab]);
+
+  const handleSaveCurrentFile = useCallback(async () => {
+    const api = window.electronAPI;
+    const xml = exportXml();
+    if (!api) {
+      const blob = new Blob([xml], { type: 'application/x-freemind;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${map.root.text || 'mindmap'}.mm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (activeFilePath) {
+      const res = await api.saveFile(activeFilePath, xml);
+      if (res.ok) {
+        showToast(`上書き保存しました: ${activeFilePath.split(/[\\/]/).pop()}`);
+      } else {
+        showToast(`保存に失敗しました: ${res.error || ''}`);
+      }
+      return;
+    }
+
+    const res = await api.saveMmFileDialog(map.root.text || 'mindmap', xml);
+    if (!res.canceled && res.filePath) {
+      setTabFilePath(activeTabId, res.filePath);
+      showToast(`保存しました: ${res.fileName || res.filePath}`);
+    }
+  }, [exportXml, map.root.text, activeFilePath, setTabFilePath, activeTabId, showToast]);
+
+  useEffect(() => {
+    const handleSaveKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && !isForestViewOpen) {
+        e.preventDefault();
+        handleSaveCurrentFile();
+      }
+    };
+    window.addEventListener('keydown', handleSaveKey);
+    return () => window.removeEventListener('keydown', handleSaveKey);
+  }, [handleSaveCurrentFile, isForestViewOpen]);
+
+  const handleOpenFileDialog = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api) return;
+    const payload = await api.openMmFile();
+    if (payload) {
+      openFileInTab(payload.filePath, payload.content, payload.fileName);
+      setIsForestViewOpen(false);
+    }
+  }, [openFileInTab]);
+
+  const handleOpenFileLink = useCallback(
+    async (targetPath: string) => {
+      const api = window.electronAPI;
+      if (!api) return;
+      const res = await api.readFileByPath(targetPath, activeFilePath);
+      if (res.ok && res.filePath && res.content !== undefined) {
+        openFileInTab(res.filePath, res.content, res.fileName);
+        showToast(`マップを開きました: ${res.fileName || res.filePath}`);
+      } else {
+        showToast(`リンク先を開けませんでした: ${res.resolvedPath || targetPath}`);
+      }
+    },
+    [activeFilePath, openFileInTab, showToast]
+  );
+
   return (
     <div
       className={`app-container ${isDarkMode ? 'theme-dark' : ''} ${
@@ -358,6 +446,9 @@ export const App: React.FC = () => {
         zoomPercent={zoomScale * 100}
         onImportXml={loadMapFromXml}
         onImportMarkdown={importMarkdown}
+        onOpenFileDialog={window.electronAPI ? handleOpenFileDialog : undefined}
+        onSaveDirect={window.electronAPI ? handleSaveCurrentFile : undefined}
+        activeFilePath={activeFilePath}
         onExportXml={handleExport}
         onExportMarkdown={handleExportMarkdown}
         onExportSvg={handleExportSvg}
@@ -455,6 +546,7 @@ export const App: React.FC = () => {
                   setActiveTabId(targetTabId);
                 }
               }}
+              onOpenFileLink={window.electronAPI ? handleOpenFileLink : undefined}
               isPresentationActive={isPresentationActive}
               visibleNodeIds={presentationVisibleNodeIds}
               activeNodeId={presentationActiveNodeId}
@@ -496,6 +588,7 @@ export const App: React.FC = () => {
               <NodePropertiesPanel
                 node={selectedNode}
                 map={map}
+                currentFilePath={activeFilePath}
                 onUpdate={patch => selectedNodeId && updateNodeProperties(selectedNodeId, patch)}
                 onClose={() => setIsPropertiesOpen(false)}
               />

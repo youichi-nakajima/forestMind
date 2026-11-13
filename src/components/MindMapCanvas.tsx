@@ -27,6 +27,7 @@ interface MindMapCanvasProps {
   onFitToScreen?: () => void;
   searchMatchedIds?: string[];
   onNavigateTab?: (tabId: string) => void;
+  onOpenFileLink?: (targetPath: string) => void;
   isPresentationActive?: boolean;
   visibleNodeIds?: Set<string>;
   activeNodeId?: string | null;
@@ -67,6 +68,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onFitToScreen,
   searchMatchedIds = [],
   onNavigateTab,
+  onOpenFileLink,
   isPresentationActive = false,
   visibleNodeIds,
   activeNodeId,
@@ -712,6 +714,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                         if (node.link?.startsWith('forest://') && onNavigateTab) {
                           e.preventDefault();
                           onNavigateTab(node.link.replace('forest://', ''));
+                        } else if (
+                          node.link &&
+                          onOpenFileLink &&
+                          /\.(mm|md)$/i.test(node.link.trim()) &&
+                          !/^https?:\/\//i.test(node.link.trim())
+                        ) {
+                          e.preventDefault();
+                          onOpenFileLink(node.link);
                         }
                       }}
                     >
@@ -996,6 +1006,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   if (href?.startsWith('forest://') && onNavigateTab) {
                     e.preventDefault();
                     onNavigateTab(href.replace('forest://', ''));
+                  } else if (
+                    href &&
+                    onOpenFileLink &&
+                    /\.(mm|md)$/i.test(href.trim()) &&
+                    !/^https?:\/\//i.test(href.trim())
+                  ) {
+                    e.preventDefault();
+                    onOpenFileLink(href);
                   }
                 }
               }}

@@ -51,6 +51,9 @@ interface ToolbarProps {
   zoomPercent: number;
   onImportXml: (xml: string) => void;
   onImportMarkdown: (md: string) => void;
+  onOpenFileDialog?: () => void;
+  onSaveDirect?: () => void;
+  activeFilePath?: string;
   onExportXml: () => void;
   onExportMarkdown: () => void;
   onExportSvg?: () => void;
@@ -94,6 +97,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   zoomPercent,
   onImportXml,
   onImportMarkdown,
+  onOpenFileDialog,
+  onSaveDirect,
+  activeFilePath,
   onExportXml,
   onExportMarkdown,
   onExportSvg,
@@ -245,7 +251,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           className="toolbar-btn"
           title="FreeMind (.mm) または Markdown (.md) ファイルを開く"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => (onOpenFileDialog ? onOpenFileDialog() : fileInputRef.current?.click())}
         >
           <FolderOpen size={16} />
           <span>開く</span>
@@ -262,6 +268,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           {showExportMenu && (
             <div className="export-menu" onClick={() => setShowExportMenu(false)}>
+              {onSaveDirect && (
+                <button className="export-menu-item" onClick={onSaveDirect}>
+                  <Download size={14} />
+                  <div>
+                    <strong>{activeFilePath ? '上書き保存 (Ctrl+S)' : 'ファイルに保存 (Ctrl+S)'}</strong>
+                    <p>{activeFilePath ? activeFilePath.split(/[\\/]/).pop() : '保存先を選択'}</p>
+                  </div>
+                </button>
+              )}
               <button className="export-menu-item" onClick={onExportXml}>
                 <Download size={14} />
                 <div>

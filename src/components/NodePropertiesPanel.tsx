@@ -18,6 +18,7 @@ import {
 interface NodePropertiesPanelProps {
   node: FreeMindNode | null;
   map: FreeMindMap;
+  currentFilePath?: string;
   onUpdate: (patch: Partial<FreeMindNode>) => void;
   onClose: () => void;
 }
@@ -40,6 +41,7 @@ const AVAILABLE_ICONS = [
 export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
   node,
   map,
+  currentFilePath,
   onUpdate,
   onClose,
 }) => {
@@ -217,13 +219,30 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
             <LinkIcon size={14} />
             <span>リンク (URL / パス)</span>
           </label>
-          <input
-            type="text"
-            className="form-input"
-            placeholder="https://... またはファイルパス"
-            value={node.link || ''}
-            onChange={e => onUpdate({ link: e.target.value || undefined })}
-          />
+          <div className="add-attribute-row">
+            <input
+              type="text"
+              className="form-input attr-input"
+              placeholder="https://... または ./submap.mm"
+              value={node.link || ''}
+              onChange={e => onUpdate({ link: e.target.value || undefined })}
+            />
+            {window.electronAPI && (
+              <button
+                type="button"
+                className="add-attr-btn"
+                title="別の .mm ファイルを選択してリンク"
+                onClick={async () => {
+                  const res = await window.electronAPI?.pickTargetMmFile(currentFilePath);
+                  if (res?.linkValue) {
+                    onUpdate({ link: res.linkValue });
+                  }
+                }}
+              >
+                .mm参照
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Note (HTML / text) */}

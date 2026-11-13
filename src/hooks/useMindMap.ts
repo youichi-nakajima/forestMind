@@ -8,6 +8,7 @@ import { serializeSubtreeToMarkdown, parseMarkdownToSubtree } from '../utils/mar
 export interface MapTab {
   id: string;
   title: string;
+  filePath?: string;
   map: FreeMindMap;
   past: FreeMindMap[];
   future: FreeMindMap[];
@@ -22,13 +23,14 @@ export function useMindMap() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TABS);
       if (saved) {
-        const parsed = JSON.parse(saved) as { id: string; title: string; xml: string }[];
+        const parsed = JSON.parse(saved) as { id: string; title: string; filePath?: string; xml: string }[];
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(t => {
             const mapObj = parseFreeMindXml(t.xml);
             return {
               id: t.id,
               title: t.title || mapObj.root.text || '無題マップ',
+              filePath: t.filePath,
               map: mapObj,
               past: [],
               future: [],
@@ -76,6 +78,7 @@ export function useMindMap() {
       const serializedTabs = tabs.map(t => ({
         id: t.id,
         title: t.map.root.text || t.title,
+        filePath: t.filePath,
         xml: serializeFreeMindXml(t.map),
       }));
       localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(serializedTabs));
@@ -86,7 +89,7 @@ export function useMindMap() {
   }, [tabs, activeTabId]);
 
   // Tab operations
-  const createNewTab = useCallback((customMap?: FreeMindMap, title?: string) => {
+  const createNewTab = useCallback((customMap?: FreeMindMap, title?: string, filePath?: string) => {
     const newId = `tab_${Date.now()}`;
     const newMap: FreeMindMap = customMap || {
       version: '1.0.1',
@@ -106,6 +109,7 @@ export function useMindMap() {
     const newTab: MapTab = {
       id: newId,
       title: newMap.root.text || title || '新規マップ',
+      filePath,
       map: newMap,
       past: [],
       future: [],
@@ -116,6 +120,48 @@ export function useMindMap() {
     setActiveTabId(newId);
     setEditingNodeId(null);
   }, []);
+
+  const setTabFilePath = useCallback((tabId: string, filePath: string) => {
+    setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, filePath } : t)));
+  }, []);
+
+  const openFileInTab = useCallback(
+    (filePath: string, content: string, fileName?: string) => {
+      const normalized = filePath.toLowerCase();
+      const existing = tabs.find(t => t.filePath?.toLowerCase() === normalized);
+      if (existing) {
+        setActiveTabId(existing.id);
+        setEditingNodeId(null);
+        return;
+      }
+
+      const lowerName = (fileName || filePath).toLowerCase();
+      if (lowerName.endsWith('.md') || lowerName.endsWith('.txt')) {
+        const rootTitle = (fileName || 'Markdown').replace(/\.(md|txt)$/i, '');
+        const rootChildren = parseMarkdownToSubtree(content);
+        const newMap: FreeMindMap = {
+          version: '1.0.1',
+          root: {
+            id: generateNodeId(),
+            text: rootTitle,
+            style: 'bubble',
+            font: { size: 16, bold: true },
+            icons: [],
+            attributes: [],
+            arrowLinks: [],
+            hooks: [],
+            children: rootChildren,
+          },
+        };
+        createNewTab(newMap, rootTitle, filePath);
+        return;
+      }
+
+      const parsed = parseFreeMindXml(content);
+      createNewTab(parsed, parsed.root.text || fileName, filePath);
+    },
+    [tabs, createNewTab]
+  );
 
   const closeTab = useCallback((tabId: string) => {
     if (tabs.length <= 1) {
@@ -794,8 +840,11 @@ export function useMindMap() {
   return {
     tabs,
     activeTabId,
+    activeFilePath: activeTab.filePath,
     setActiveTabId,
     createNewTab,
+    setTabFilePath,
+    openFileInTab,
     closeTab,
     map,
     selectedNodeId,

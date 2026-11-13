@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ecfdf5" />
+      <stop offset="100%" stop-color="#d1fae5" />
+    </linearGradient>
+    <linearGradient id="backTree" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf" />
+      <stop offset="55%" stop-color="#0d9488" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+    <linearGradient id="treeTop" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="treeMid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="treeBot" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded App Icon Background -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bgGrad)" />
+  <rect x="28" y="28" width="456" height="456" rx="104" fill="none" stroke="#6ee7b7" stroke-width="6" />
+
+  <!-- Ground shadow -->
+  <ellipse cx="256" cy="414" rx="144" ry="16" fill="#065f46" fill-opacity="0.14" />
+
+  <!-- Back Left Smaller Tree -->
+  <g opacity="0.92">
+    <rect x="135" y="348" width="26" height="50" rx="6" fill="#78350f" />
+    <path d="M 148 248 L 228 356 Q 234 364 224 364 L 72 364 Q 62 364 68 356 Z" fill="url(#backTree)" />
+    <path d="M 148 206 L 212 302 Q 218 310 208 310 L 88 310 Q 78 310 84 302 Z" fill="url(#backTree)" />
+    <path d="M 148 168 L 194 248 Q 200 256 190 256 L 106 256 Q 96 256 102 248 Z" fill="url(#backTree)" />
+  </g>
+
+  <!-- Back Right Smaller Tree -->
+  <g opacity="0.92">
+    <rect x="351" y="348" width="26" height="50" rx="6" fill="#78350f" />
+    <path d="M 364 248 L 444 356 Q 450 364 440 364 L 288 364 Q 278 364 284 356 Z" fill="url(#backTree)" />
+    <path d="M 364 206 L 428 302 Q 434 310 424 310 L 304 310 Q 294 310 300 302 Z" fill="url(#backTree)" />
+    <path d="M 364 168 L 410 248 Q 416 256 406 256 L 322 256 Q 312 256 318 248 Z" fill="url(#backTree)" />
+  </g>
+
+  <!-- Front Main Tree -->
+  <rect x="234" y="346" width="44" height="68" rx="10" fill="#92400e" />
+  <path d="M 256 196 L 388 358 Q 396 368 382 368 L 130 368 Q 116 368 124 358 Z" fill="url(#treeBot)" />
+  <path d="M 256 132 L 360 274 Q 368 284 354 284 L 158 284 Q 144 284 152 274 Z" fill="url(#treeMid)" />
+  <path d="M 256 76 L 330 192 Q 338 202 324 202 L 188 202 Q 174 202 182 192 Z" fill="url(#treeTop)" />
+</svg>

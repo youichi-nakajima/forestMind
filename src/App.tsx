@@ -431,6 +431,10 @@ export const App: React.FC = () => {
               onAddSibling={addSiblingNode}
               onDeleteNode={deleteNode}
               onUpdateText={updateNodeText}
+              onClearNote={nodeId => {
+                updateNodeProperties(nodeId, { noteHtml: undefined });
+                showToast('ノートを削除しました (Ctrl+Z で元に戻せます)');
+              }}
               onToggleFold={toggleFold}
               onMoveNode={moveNode}
               onCopyNode={handleCopy}

@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { FreeMindMap } from '../types/freemind';
 import { computeLayout, LayoutNode, EdgePath } from '../utils/layout';
 import { computeMapBounds } from '../utils/exportImage';
-import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus } from 'lucide-react';
+import { renderNoteForPopover } from '../utils/noteRenderer';
+import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2 } from 'lucide-react';
 
 interface MindMapCanvasProps {
   map: FreeMindMap;
@@ -14,6 +15,7 @@ interface MindMapCanvasProps {
   onAddSibling: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onUpdateText: (nodeId: string, text: string) => void;
+  onClearNote?: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
   onMoveNode: (draggedId: string, targetId: string) => void;
   onUndo: () => void;
@@ -48,6 +50,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onAddSibling,
   onDeleteNode,
   onUpdateText,
+  onClearNote,
   onToggleFold,
   onMoveNode,
   onCopyNode,
@@ -77,6 +80,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const [editingText, setEditingText] = useState('');
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
+  const [notePopover, setNotePopover] = useState<{ nodeId: string; pinned: boolean } | null>(null);
+  const noteHoverTimerRef = useRef<number | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 1000,
     height: 700,
@@ -167,6 +172,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       panStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
       setSelectedNodeId(null);
       setEditingNodeId(null);
+      setNotePopover(null);
     }
   };
 
@@ -204,6 +210,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       if (editingNodeId) {
         // When editing an inline input, do not trigger navigation shortcuts
         return;
+      }
+
+      if (e.key === 'Escape') {
+        setNotePopover(prev => (prev ? null : prev));
       }
 
       // Ignore shortcuts when focus is inside form controls (Properties Panel, Search input, etc.)
@@ -711,9 +721,45 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
                   {/* Note Indicator */}
                   {node.noteHtml && (
-                    <span className="node-note-indicator" title="ノートあり">
+                    <button
+                      type="button"
+                      className={`node-note-indicator ${
+                        notePopover?.nodeId === lNode.id && notePopover.pinned ? 'pinned' : ''
+                      }`}
+                      title="ノートを表示（クリックで固定）"
+                      onMouseEnter={() => {
+                        if (noteHoverTimerRef.current !== null) {
+                          window.clearTimeout(noteHoverTimerRef.current);
+                          noteHoverTimerRef.current = null;
+                        }
+                        setNotePopover(prev =>
+                          prev?.pinned && prev.nodeId !== lNode.id
+                            ? prev
+                            : { nodeId: lNode.id, pinned: prev?.nodeId === lNode.id ? prev.pinned : false }
+                        );
+                      }}
+                      onMouseLeave={() => {
+                        if (noteHoverTimerRef.current !== null) {
+                          window.clearTimeout(noteHoverTimerRef.current);
+                        }
+                        noteHoverTimerRef.current = window.setTimeout(() => {
+                          setNotePopover(prev =>
+                            prev && !prev.pinned && prev.nodeId === lNode.id ? null : prev
+                          );
+                          noteHoverTimerRef.current = null;
+                        }, 180);
+                      }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setNotePopover(prev =>
+                          prev && prev.pinned && prev.nodeId === lNode.id
+                            ? null
+                            : { nodeId: lNode.id, pinned: true }
+                        );
+                      }}
+                    >
                       <FileText size={12} />
-                    </span>
+                    </button>
                   )}
 
                   {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
@@ -850,6 +896,114 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           )}
         </div>
       )}
+
+      {/* Note Popover */}
+      {(() => {
+        if (!notePopover || isPresentationActive) return null;
+        const pLayout = layoutNodes.get(notePopover.nodeId);
+        if (!pLayout || !pLayout.node.noteHtml) return null;
+
+        const renderedHtml = renderNoteForPopover(pLayout.node.noteHtml);
+        if (!renderedHtml) return null;
+
+        const popWidth = Math.min(320, Math.max(220, containerSize.width - 24));
+        const rawLeft = panOffset.x + pLayout.x * zoomScale - popWidth / 2;
+        const rawTop = panOffset.y + (pLayout.y + pLayout.height / 2) * zoomScale + 10;
+        const left = Math.max(12, Math.min(containerSize.width - popWidth - 12, rawLeft));
+        const top = Math.max(12, Math.min(containerSize.height - 220, rawTop));
+
+        return (
+          <div
+            className={`note-popover ${notePopover.pinned ? 'pinned' : ''}`}
+            style={{ left: `${left}px`, top: `${top}px`, width: `${popWidth}px` }}
+            onMouseDown={e => e.stopPropagation()}
+            onWheel={e => e.stopPropagation()}
+            onMouseEnter={() => {
+              if (noteHoverTimerRef.current !== null) {
+                window.clearTimeout(noteHoverTimerRef.current);
+                noteHoverTimerRef.current = null;
+              }
+            }}
+            onMouseLeave={() => {
+              if (!notePopover.pinned) {
+                if (noteHoverTimerRef.current !== null) {
+                  window.clearTimeout(noteHoverTimerRef.current);
+                }
+                noteHoverTimerRef.current = window.setTimeout(() => {
+                  setNotePopover(prev =>
+                    prev && !prev.pinned && prev.nodeId === pLayout.id ? null : prev
+                  );
+                  noteHoverTimerRef.current = null;
+                }, 180);
+              }
+            }}
+          >
+            <div className="note-popover-header">
+              <span className="note-popover-title">
+                <FileText size={13} />
+                <span>{pLayout.node.text || 'ノート'}</span>
+              </span>
+              <div className="note-popover-actions">
+                <button
+                  type="button"
+                  className="note-popover-btn"
+                  title="プロパティパネルで編集"
+                  onClick={() => {
+                    setSelectedNodeId(pLayout.id);
+                    setNotePopover(null);
+                    window.setTimeout(() => {
+                      const textarea = document.querySelector<HTMLTextAreaElement>(
+                        '.properties-panel textarea'
+                      );
+                      if (textarea) {
+                        textarea.focus();
+                        textarea.scrollIntoView({ block: 'nearest' });
+                      }
+                    }, 60);
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+                {onClearNote && (
+                  <button
+                    type="button"
+                    className="note-popover-btn danger"
+                    title="ノートを削除"
+                    onClick={() => {
+                      onClearNote(pLayout.id);
+                      setNotePopover(null);
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="note-popover-btn"
+                  title="閉じる (Esc)"
+                  onClick={() => setNotePopover(null)}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+            <div
+              className="note-popover-body"
+              onClick={e => {
+                const anchor = (e.target as HTMLElement).closest('a');
+                if (anchor) {
+                  const href = anchor.getAttribute('href');
+                  if (href?.startsWith('forest://') && onNavigateTab) {
+                    e.preventDefault();
+                    onNavigateTab(href.replace('forest://', ''));
+                  }
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 };

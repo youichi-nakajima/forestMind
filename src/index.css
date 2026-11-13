@@ -510,8 +510,21 @@ body {
 .node-note-indicator {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   margin-left: 6px;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: #d97706;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.node-note-indicator:hover,
+.node-note-indicator.pinned {
+  background-color: rgba(217, 119, 6, 0.14);
+  transform: scale(1.1);
 }
 
 /* Fold Button */
@@ -2836,4 +2849,177 @@ body {
 .app-container.theme-dark .minimap-viewport-rect {
   fill: rgba(56, 189, 248, 0.14);
   stroke: #38bdf8;
+}
+
+/* ==========================================================================
+   Note Popover Overlay
+   ========================================================================== */
+.note-popover {
+  position: absolute;
+  z-index: 35;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+  color: #1e293b;
+}
+
+.note-popover.pinned {
+  border-color: #d97706;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
+}
+
+.note-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: #fefce8;
+  border-bottom: 1px solid #fde68a;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.note-popover-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-popover-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.note-popover-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #92400e;
+  cursor: pointer;
+  padding: 0;
+}
+
+.note-popover-btn:hover {
+  background: rgba(217, 119, 6, 0.16);
+}
+
+.note-popover-btn.danger:hover {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
+.note-popover-body {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  word-break: break-word;
+  user-select: text;
+}
+
+.note-popover-body p {
+  margin: 0 0 6px 0;
+}
+
+.note-popover-body p:last-child,
+.note-popover-body ul:last-child,
+.note-popover-body ol:last-child,
+.note-popover-body blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.note-popover-body h1,
+.note-popover-body h2,
+.note-popover-body h3,
+.note-popover-body h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.note-popover-body ul,
+.note-popover-body ol {
+  margin: 0 0 6px 0;
+  padding-left: 18px;
+}
+
+.note-popover-body blockquote {
+  margin: 0 0 6px 0;
+  padding-left: 8px;
+  border-left: 3px solid #cbd5e1;
+  color: #64748b;
+}
+
+.note-popover-body code {
+  font-family: monospace;
+  font-size: 11.5px;
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.note-popover-body a {
+  color: #0284c7;
+  text-decoration: underline;
+}
+
+.app-container.theme-dark .note-popover {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: #334155;
+  color: #e2e8f0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.app-container.theme-dark .note-popover.pinned {
+  border-color: #f59e0b;
+}
+
+.app-container.theme-dark .note-popover-header {
+  background: rgba(120, 53, 15, 0.35);
+  border-bottom-color: rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+}
+
+.app-container.theme-dark .note-popover-btn {
+  color: #fcd34d;
+}
+
+.app-container.theme-dark .note-popover-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.app-container.theme-dark .note-popover-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+}
+
+.app-container.theme-dark .note-popover-body blockquote {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .note-popover-body code {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.app-container.theme-dark .note-popover-body a {
+  color: #38bdf8;
 }

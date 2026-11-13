@@ -25,6 +25,8 @@ import {
   Moon,
   Copy,
   CopyPlus,
+  Maximize2,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -45,11 +47,14 @@ interface ToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
+  onFitToScreen?: () => void;
   zoomPercent: number;
   onImportXml: (xml: string) => void;
   onImportMarkdown: (md: string) => void;
   onExportXml: () => void;
   onExportMarkdown: () => void;
+  onExportSvg?: () => void;
+  onExportPng?: () => void;
   onUnfoldAll: () => void;
   onFoldAll: () => void;
   onOpenHelp: () => void;
@@ -85,11 +90,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  onFitToScreen,
   zoomPercent,
   onImportXml,
   onImportMarkdown,
   onExportXml,
   onExportMarkdown,
+  onExportSvg,
+  onExportPng,
   onUnfoldAll,
   onFoldAll,
   onOpenHelp,
@@ -268,6 +276,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   <p>箇条書きアウトライン形式</p>
                 </div>
               </button>
+              {onExportPng && (
+                <button className="export-menu-item" onClick={onExportPng}>
+                  <ImageIcon size={14} />
+                  <div>
+                    <strong>PNG 画像 (.png)</strong>
+                    <p>高解像度画像として保存</p>
+                  </div>
+                </button>
+              )}
+              {onExportSvg && (
+                <button className="export-menu-item" onClick={onExportSvg}>
+                  <ImageIcon size={14} />
+                  <div>
+                    <strong>SVG 画像 (.svg)</strong>
+                    <p>拡大縮小しても劣化しない形式</p>
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -458,6 +484,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button className="toolbar-btn icon-only" title="表示リセット (100% / 中央)" onClick={onResetZoom}>
           <RotateCcw size={16} />
         </button>
+        {onFitToScreen && (
+          <button
+            className="toolbar-btn icon-only"
+            title="マップ全体を表示に合わせる (Ctrl+0)"
+            onClick={onFitToScreen}
+          >
+            <Maximize2 size={15} />
+          </button>
+        )}
       </div>
 
       <div className="toolbar-divider" />

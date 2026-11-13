@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { FreeMindMap } from '../types/freemind';
 import { computeLayout, LayoutNode, EdgePath } from '../utils/layout';
-import { ExternalLink, FileText, ChevronRight, ChevronLeft } from 'lucide-react';
+import { computeMapBounds } from '../utils/exportImage';
+import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus } from 'lucide-react';
 
 interface MindMapCanvasProps {
   map: FreeMindMap;
@@ -21,6 +22,7 @@ interface MindMapCanvasProps {
   setZoomScale: (updater: (prev: number) => number) => void;
   panOffset: { x: number; y: number };
   setPanOffset: (updater: (prev: { x: number; y: number }) => { x: number; y: number }) => void;
+  onFitToScreen?: () => void;
   searchMatchedIds?: string[];
   onNavigateTab?: (tabId: string) => void;
   isPresentationActive?: boolean;
@@ -59,6 +61,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   setZoomScale,
   panOffset,
   setPanOffset,
+  onFitToScreen,
   searchMatchedIds = [],
   onNavigateTab,
   isPresentationActive = false,
@@ -73,11 +76,36 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [editingText, setEditingText] = useState('');
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
+  const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
+    width: 1000,
+    height: 700,
+  });
+  const minimapSvgRef = useRef<SVGSVGElement>(null);
+  const isDraggingMinimapRef = useRef(false);
 
   // Compute layout tree, curved edge paths, arrow links, and clouds
   const { layoutNodes, edges, arrowLinks, clouds } = useMemo(() => {
     return computeLayout(map.root);
   }, [map]);
+
+  const mapBounds = useMemo(() => computeMapBounds(layoutNodes, clouds), [layoutNodes, clouds]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+    };
+    updateSize();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateSize) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', updateSize);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, []);
 
   // Center root node initially if pan is at default
   useEffect(() => {
@@ -356,6 +384,41 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       setEditingNodeId(null);
     }
   };
+
+  const minimapPad = 40;
+  const mmVbX = mapBounds.minX - minimapPad;
+  const mmVbY = mapBounds.minY - minimapPad;
+  const mmVbW = mapBounds.width + minimapPad * 2;
+  const mmVbH = mapBounds.height + minimapPad * 2;
+
+  const panToMinimapClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const svgEl = minimapSvgRef.current;
+      if (!svgEl) return;
+      const rect = svgEl.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const scale = Math.min(rect.width / mmVbW, rect.height / mmVbH);
+      const drawW = mmVbW * scale;
+      const drawH = mmVbH * scale;
+      const offsetX = rect.left + (rect.width - drawW) / 2;
+      const offsetY = rect.top + (rect.height - drawH) / 2;
+
+      const wx = mmVbX + (clientX - offsetX) / scale;
+      const wy = mmVbY + (clientY - offsetY) / scale;
+
+      setPanOffset(() => ({
+        x: containerSize.width / 2 - wx * zoomScale,
+        y: containerSize.height / 2 - wy * zoomScale,
+      }));
+    },
+    [mmVbX, mmVbY, mmVbW, mmVbH, containerSize.width, containerSize.height, zoomScale, setPanOffset]
+  );
+
+  const viewLeft = -panOffset.x / zoomScale;
+  const viewTop = -panOffset.y / zoomScale;
+  const viewWidth = containerSize.width / zoomScale;
+  const viewHeight = containerSize.height / zoomScale;
 
   return (
     <div
@@ -667,6 +730,114 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             })}
         </div>
       </div>
+
+      {/* Minimap & Fit-to-Screen Overlay */}
+      {!isPresentationActive && (
+        <div
+          className={`minimap-container ${isMinimapCollapsed ? 'collapsed' : ''}`}
+          onMouseDown={e => e.stopPropagation()}
+          onWheel={e => e.stopPropagation()}
+        >
+          <div className="minimap-header">
+            <span className="minimap-title">
+              <MapIcon size={12} />
+              <span>全体マップ</span>
+            </span>
+            <div className="minimap-actions">
+              {onFitToScreen && (
+                <button
+                  type="button"
+                  className="minimap-action-btn"
+                  title="全体を表示に合わせる (Ctrl+0)"
+                  onClick={onFitToScreen}
+                >
+                  <Maximize2 size={12} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="minimap-action-btn"
+                title={isMinimapCollapsed ? 'ミニマップを展開' : 'ミニマップを折りたたむ'}
+                onClick={() => setIsMinimapCollapsed(prev => !prev)}
+              >
+                {isMinimapCollapsed ? <MapIcon size={12} /> : <Minus size={12} />}
+              </button>
+            </div>
+          </div>
+
+          {!isMinimapCollapsed && (
+            <svg
+              ref={minimapSvgRef}
+              className="minimap-svg"
+              viewBox={`${mmVbX} ${mmVbY} ${mmVbW} ${mmVbH}`}
+              preserveAspectRatio="xMidYMid meet"
+              onMouseDown={e => {
+                e.stopPropagation();
+                isDraggingMinimapRef.current = true;
+                panToMinimapClient(e.clientX, e.clientY);
+              }}
+              onMouseMove={e => {
+                if (isDraggingMinimapRef.current) {
+                  e.stopPropagation();
+                  panToMinimapClient(e.clientX, e.clientY);
+                }
+              }}
+              onMouseUp={e => {
+                e.stopPropagation();
+                isDraggingMinimapRef.current = false;
+              }}
+              onMouseLeave={() => {
+                isDraggingMinimapRef.current = false;
+              }}
+            >
+              {clouds.map(c => (
+                <path
+                  key={`mm-cloud-${c.id}`}
+                  d={c.d}
+                  fill={c.color}
+                  fillOpacity={0.35}
+                  stroke={c.strokeColor}
+                  strokeOpacity={0.6}
+                  strokeWidth={Math.max(2, mmVbW / 180)}
+                />
+              ))}
+              {edges.map(edge => (
+                <path
+                  key={`mm-edge-${edge.id}`}
+                  d={edge.d}
+                  fill="none"
+                  stroke={edge.color}
+                  strokeOpacity={0.7}
+                  strokeWidth={Math.max(2, mmVbW / 160)}
+                />
+              ))}
+              {Array.from(layoutNodes.values()).map(lNode => {
+                const isRoot = lNode.depth === 0;
+                const isSelected = selectedNodeId === lNode.id;
+                return (
+                  <rect
+                    key={`mm-node-${lNode.id}`}
+                    x={lNode.x - lNode.width / 2}
+                    y={lNode.y - lNode.height / 2}
+                    width={lNode.width}
+                    height={lNode.height}
+                    rx={isRoot ? 10 : 5}
+                    className={`minimap-node ${isRoot ? 'root' : ''} ${isSelected ? 'selected' : ''}`}
+                  />
+                );
+              })}
+              <rect
+                className="minimap-viewport-rect"
+                x={viewLeft}
+                y={viewTop}
+                width={viewWidth}
+                height={viewHeight}
+                strokeWidth={Math.max(3, mmVbW / 90)}
+              />
+            </svg>
+          )}
+        </div>
+      )}
     </div>
   );
 };

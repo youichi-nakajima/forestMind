@@ -11,6 +11,8 @@ import { HelpModal } from './components/HelpModal';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
 import { resumeAudioContext } from './utils/audio';
+import { computeLayout } from './utils/layout';
+import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
 
 export const App: React.FC = () => {
   const {
@@ -240,8 +242,47 @@ export const App: React.FC = () => {
   const handleZoomOut = () => setZoomScale(z => Math.max(z / 1.2, 0.25));
   const handleResetZoom = () => {
     setZoomScale(1.0);
-    setPanOffset({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    const canvasEl = document.querySelector('.mindmap-canvas-container');
+    if (canvasEl) {
+      const rect = canvasEl.getBoundingClientRect();
+      setPanOffset({ x: rect.width / 2, y: rect.height / 2 });
+    } else {
+      setPanOffset({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    }
   };
+
+  const handleFitToScreen = useCallback(() => {
+    const { layoutNodes, clouds } = computeLayout(map.root);
+    const bounds = computeMapBounds(layoutNodes, clouds);
+    const canvasEl = document.querySelector('.mindmap-canvas-container');
+    const viewW = canvasEl ? canvasEl.clientWidth : window.innerWidth;
+    const viewH = canvasEl ? canvasEl.clientHeight : window.innerHeight - 100;
+    const pad = 48;
+    const availW = Math.max(120, viewW - pad * 2);
+    const availH = Math.max(120, viewH - pad * 2);
+    const rawScale = Math.min(availW / bounds.width, availH / bounds.height);
+    const nextScale = Math.max(0.25, Math.min(1.5, rawScale));
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+
+    setZoomScale(nextScale);
+    setPanOffset({
+      x: viewW / 2 - centerX * nextScale,
+      y: viewH / 2 - centerY * nextScale,
+    });
+  }, [map.root]);
+
+  // Global F5 & Ctrl+0 key listener
+  useEffect(() => {
+    const handleFitKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '0' && !isForestViewOpen) {
+        e.preventDefault();
+        handleFitToScreen();
+      }
+    };
+    window.addEventListener('keydown', handleFitKey);
+    return () => window.removeEventListener('keydown', handleFitKey);
+  }, [handleFitToScreen, isForestViewOpen]);
 
   // Export .mm file download
   const handleExport = () => {
@@ -269,6 +310,20 @@ export const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportSvg = () => {
+    exportMindMapAsSvg(map.root, map.root.text || 'mindmap', isDarkMode);
+    showToast('SVG画像を書き出しました');
+  };
+
+  const handleExportPng = async () => {
+    try {
+      await exportMindMapAsPng(map.root, map.root.text || 'mindmap', isDarkMode);
+      showToast('PNG画像を書き出しました');
+    } catch {
+      showToast('PNGの書き出しに失敗しました');
+    }
   };
 
   return (
@@ -299,11 +354,14 @@ export const App: React.FC = () => {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
+        onFitToScreen={handleFitToScreen}
         zoomPercent={zoomScale * 100}
         onImportXml={loadMapFromXml}
         onImportMarkdown={importMarkdown}
         onExportXml={handleExport}
         onExportMarkdown={handleExportMarkdown}
+        onExportSvg={handleExportSvg}
+        onExportPng={handleExportPng}
         onUnfoldAll={unfoldAll}
         onFoldAll={foldAll}
         onOpenHelp={() => setIsHelpOpen(true)}
@@ -386,6 +444,7 @@ export const App: React.FC = () => {
               setZoomScale={setZoomScale}
               panOffset={panOffset}
               setPanOffset={setPanOffset}
+              onFitToScreen={handleFitToScreen}
               searchMatchedIds={searchResults}
               onNavigateTab={targetTabId => {
                 if (tabs.some(t => t.id === targetTabId)) {

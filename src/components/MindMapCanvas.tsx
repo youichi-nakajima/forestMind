@@ -83,6 +83,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   });
   const minimapSvgRef = useRef<SVGSVGElement>(null);
   const isDraggingMinimapRef = useRef(false);
+  const dragViewBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Compute layout tree, curved edge paths, arrow links, and clouds
   const { layoutNodes, edges, arrowLinks, clouds } = useMemo(() => {
@@ -385,27 +386,39 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     }
   };
 
+  const viewLeft = -panOffset.x / zoomScale;
+  const viewTop = -panOffset.y / zoomScale;
+  const viewWidth = containerSize.width / zoomScale;
+  const viewHeight = containerSize.height / zoomScale;
+
   const minimapPad = 40;
-  const mmVbX = mapBounds.minX - minimapPad;
-  const mmVbY = mapBounds.minY - minimapPad;
-  const mmVbW = mapBounds.width + minimapPad * 2;
-  const mmVbH = mapBounds.height + minimapPad * 2;
+  const viewPad = 12 / zoomScale;
+  const unionMinX = Math.min(mapBounds.minX - minimapPad, viewLeft - viewPad);
+  const unionMaxX = Math.max(mapBounds.maxX + minimapPad, viewLeft + viewWidth + viewPad);
+  const unionMinY = Math.min(mapBounds.minY - minimapPad, viewTop - viewPad);
+  const unionMaxY = Math.max(mapBounds.maxY + minimapPad, viewTop + viewHeight + viewPad);
+
+  const mmVbX = unionMinX;
+  const mmVbY = unionMinY;
+  const mmVbW = Math.max(1, unionMaxX - unionMinX);
+  const mmVbH = Math.max(1, unionMaxY - unionMinY);
 
   const panToMinimapClient = useCallback(
-    (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number, vbOverride?: { x: number; y: number; w: number; h: number }) => {
       const svgEl = minimapSvgRef.current;
       if (!svgEl) return;
       const rect = svgEl.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const scale = Math.min(rect.width / mmVbW, rect.height / mmVbH);
-      const drawW = mmVbW * scale;
-      const drawH = mmVbH * scale;
+      const vb = vbOverride || { x: mmVbX, y: mmVbY, w: mmVbW, h: mmVbH };
+      const scale = Math.min(rect.width / vb.w, rect.height / vb.h);
+      const drawW = vb.w * scale;
+      const drawH = vb.h * scale;
       const offsetX = rect.left + (rect.width - drawW) / 2;
       const offsetY = rect.top + (rect.height - drawH) / 2;
 
-      const wx = mmVbX + (clientX - offsetX) / scale;
-      const wy = mmVbY + (clientY - offsetY) / scale;
+      const wx = vb.x + (clientX - offsetX) / scale;
+      const wy = vb.y + (clientY - offsetY) / scale;
 
       setPanOffset(() => ({
         x: containerSize.width / 2 - wx * zoomScale,
@@ -414,11 +427,6 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     },
     [mmVbX, mmVbY, mmVbW, mmVbH, containerSize.width, containerSize.height, zoomScale, setPanOffset]
   );
-
-  const viewLeft = -panOffset.x / zoomScale;
-  const viewTop = -panOffset.y / zoomScale;
-  const viewWidth = containerSize.width / zoomScale;
-  const viewHeight = containerSize.height / zoomScale;
 
   return (
     <div
@@ -774,20 +782,24 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               onMouseDown={e => {
                 e.stopPropagation();
                 isDraggingMinimapRef.current = true;
-                panToMinimapClient(e.clientX, e.clientY);
+                const snapshot = { x: mmVbX, y: mmVbY, w: mmVbW, h: mmVbH };
+                dragViewBoxRef.current = snapshot;
+                panToMinimapClient(e.clientX, e.clientY, snapshot);
               }}
               onMouseMove={e => {
                 if (isDraggingMinimapRef.current) {
                   e.stopPropagation();
-                  panToMinimapClient(e.clientX, e.clientY);
+                  panToMinimapClient(e.clientX, e.clientY, dragViewBoxRef.current || undefined);
                 }
               }}
               onMouseUp={e => {
                 e.stopPropagation();
                 isDraggingMinimapRef.current = false;
+                dragViewBoxRef.current = null;
               }}
               onMouseLeave={() => {
                 isDraggingMinimapRef.current = false;
+                dragViewBoxRef.current = null;
               }}
             >
               {clouds.map(c => (

@@ -81,9 +81,16 @@ export const App: React.FC = () => {
   }, []);
 
   // Toast feedback helper
+  const toastTimerRef = useRef<number | null>(null);
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 1800);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 1800);
   }, []);
 
   const handleCopy = useCallback(async () => {

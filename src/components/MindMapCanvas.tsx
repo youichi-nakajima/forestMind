@@ -367,9 +367,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onWheel={handleWheel}
     >
       <div
-        className={`mindmap-viewport ${isPresentationActive ? 'presentation-mode' : ''} ${
-          isPresentationActive && !isPanning ? 'smooth-transition' : ''
-        }`}
+        className={`mindmap-viewport ${isPresentationActive ? 'presentation-mode' : ''} ${isPresentationActive && !isPanning ? 'smooth-transition' : ''
+          }`}
         style={{
           transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomScale})`,
           transformOrigin: '0 0',
@@ -408,9 +407,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   strokeWidth={c.nestingLevel > 0 ? 2.2 : 2}
                   strokeLinejoin="round"
                   strokeLinecap="round"
-                  className={`mindmap-cloud ${
-                    c.nestingLevel > 0 ? `mindmap-cloud-nested level-${c.nestingLevel}` : ''
-                  } ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
+                  className={`mindmap-cloud ${c.nestingLevel > 0 ? `mindmap-cloud-nested level-${c.nestingLevel}` : ''
+                    } ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
                 />
               );
             })}
@@ -440,9 +438,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   stroke={isSpotlightEdge ? '#8b5cf6' : edge.color}
                   strokeWidth={isSpotlightEdge ? Math.max(edge.width + 1.8, 3.5) : edge.width}
                   strokeLinecap="round"
-                  className={`mindmap-edge ${
-                    isSpotlightEdge ? 'presentation-spotlight-edge' : ''
-                  } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''}`}
+                  className={`mindmap-edge ${isSpotlightEdge ? 'presentation-spotlight-edge' : ''
+                    } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''}`}
                 />
               );
             })}
@@ -473,9 +470,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   strokeDasharray="5 4"
                   fill="none"
                   markerEnd="url(#arrow)"
-                  className={`mindmap-arrow-link ${
-                    isSpotlightArrow ? 'presentation-spotlight-arrow' : ''
-                  } ${isDimmedArrow ? 'presentation-dimmed-arrow' : ''}`}
+                  className={`mindmap-arrow-link ${isSpotlightArrow ? 'presentation-spotlight-arrow' : ''
+                    } ${isDimmedArrow ? 'presentation-dimmed-arrow' : ''}`}
                 />
               );
             })}
@@ -499,178 +495,176 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               const isDimmedNode =
                 isPresentationActive && isSpotlightEnabled && !isSpotlightPathNode;
               const node = lNode.node;
-            const isRoot = lNode.side === 'root';
-            const hasChildren = node.children.length > 0;
-            const isBubble = node.style === 'bubble' || isRoot;
+              const isRoot = lNode.side === 'root';
+              const hasChildren = node.children.length > 0;
+              const isBubble = node.style === 'bubble' || isRoot;
 
-            // Styles
-            const nodeColor = node.color || (isRoot ? '#1a365d' : '#2d3748');
-            const bgColor = node.backgroundColor || (isRoot ? '#ebf8ff' : undefined);
-            const fontSize = node.font?.size || (isRoot ? 17 : 14);
-            const isBold = node.font?.bold || isRoot;
-            const isItalic = node.font?.italic || false;
+              // Explicit node overrides (defaults handled by CSS for Light/Dark theme support)
+              const explicitColor = node.color;
+              const explicitBgColor = node.backgroundColor;
+              const fontSize = node.font?.size || (isRoot ? 17 : 14);
+              const isBold = node.font?.bold || isRoot;
+              const isItalic = node.font?.italic || false;
 
-            // Anchor inner edge to exact connection point so text/underline never overlaps incoming edge
-            const anchorLeft =
-              lNode.side === 'right'
-                ? lNode.x - lNode.width / 2
-                : lNode.side === 'left'
-                  ? lNode.x + lNode.width / 2
-                  : lNode.x;
-            const anchorTransform =
-              lNode.side === 'right'
-                ? 'translate(0, -50%)'
-                : lNode.side === 'left'
-                  ? 'translate(-100%, -50%)'
-                  : 'translate(-50%, -50%)';
+              // Anchor inner edge to exact connection point so text/underline never overlaps incoming edge
+              const anchorLeft =
+                lNode.side === 'right'
+                  ? lNode.x - lNode.width / 2
+                  : lNode.side === 'left'
+                    ? lNode.x + lNode.width / 2
+                    : lNode.x;
+              const anchorTransform =
+                lNode.side === 'right'
+                  ? 'translate(0, -50%)'
+                  : lNode.side === 'left'
+                    ? 'translate(-100%, -50%)'
+                    : 'translate(-50%, -50%)';
 
-            return (
-              <div
-                key={lNode.id}
-                draggable={!isRoot && !isEditing}
-                onDragStart={e => {
-                  e.dataTransfer.setData('text/plain', lNode.id);
-                  e.dataTransfer.effectAllowed = 'move';
-                }}
-                onDragOver={e => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'move';
-                  if (dragOverNodeId !== lNode.id) {
-                    setDragOverNodeId(lNode.id);
-                  }
-                }}
-                onDragLeave={() => {
-                  setDragOverNodeId(null);
-                }}
-                onDrop={e => {
-                  e.preventDefault();
-                  setDragOverNodeId(null);
-                  const draggedId = e.dataTransfer.getData('text/plain');
-                  if (draggedId && draggedId !== lNode.id) {
-                    onMoveNode(draggedId, lNode.id);
-                  }
-                }}
-                className={`mindmap-node ${isBubble ? 'style-bubble' : 'style-fork'} ${
-                  isSelected ? 'selected' : ''
-                } ${isSearchMatch ? 'search-match' : ''} ${
-                  dragOverNodeId === lNode.id ? 'drag-target' : ''
-                } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${
-                  isPresentationActiveNode ? 'presentation-active-node' : ''
-                } ${
-                  isSpotlightPathNode && !isPresentationActiveNode ? 'presentation-spotlight-path' : ''
-                } ${isDimmedNode ? 'presentation-dimmed' : ''}`}
-                style={{
-                  left: `${anchorLeft}px`,
-                  top: `${lNode.y}px`,
-                  minWidth: `${lNode.width}px`,
-                  transform: anchorTransform,
-                  color: nodeColor,
-                  backgroundColor: bgColor,
-                  fontSize: `${fontSize}px`,
-                  fontWeight: isBold ? 'bold' : 'normal',
-                  fontStyle: isItalic ? 'italic' : 'normal',
-                  border: isBubble ? `1.5px solid ${nodeColor}` : 'none',
-                  borderBottom: !isBubble ? `2.5px solid ${nodeColor}` : undefined,
-                }}
-                onClick={e => {
-                  e.stopPropagation();
-                  setSelectedNodeId(lNode.id);
-                }}
-                onDoubleClick={e => {
-                  e.stopPropagation();
-                  setSelectedNodeId(lNode.id);
-                  setEditingNodeId(lNode.id);
-                }}
-              >
-                {/* Node Icons */}
-                {node.icons.length > 0 && (
-                  <span className="node-icons">
-                    {node.icons.map((ic, idx) => (
-                      <span key={idx} className="node-icon-badge" title={ic.builtin}>
-                        {renderIconBadge(ic.builtin)}
-                      </span>
-                    ))}
-                  </span>
-                )}
+              return (
+                <div
+                  key={lNode.id}
+                  draggable={!isRoot && !isEditing}
+                  onDragStart={e => {
+                    e.dataTransfer.setData('text/plain', lNode.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverNodeId !== lNode.id) {
+                      setDragOverNodeId(lNode.id);
+                    }
+                  }}
+                  onDragLeave={e => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setDragOverNodeId(null);
+                    }
+                  }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setDragOverNodeId(null);
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    if (draggedId && draggedId !== lNode.id) {
+                      onMoveNode(draggedId, lNode.id);
+                    }
+                  }}
+                  className={`mindmap-node ${isBubble ? 'style-bubble' : 'style-fork'} ${isSelected ? 'selected' : ''
+                    } ${isSearchMatch ? 'search-match' : ''} ${dragOverNodeId === lNode.id ? 'drag-target' : ''
+                    } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${isPresentationActiveNode ? 'presentation-active-node' : ''
+                    } ${isSpotlightPathNode && !isPresentationActiveNode ? 'presentation-spotlight-path' : ''
+                    } ${isDimmedNode ? 'presentation-dimmed' : ''}`}
+                  style={{
+                    left: `${anchorLeft}px`,
+                    top: `${lNode.y}px`,
+                    minWidth: `${lNode.width}px`,
+                    transform: anchorTransform,
+                    color: explicitColor,
+                    backgroundColor: explicitBgColor,
+                    fontSize: `${fontSize}px`,
+                    fontWeight: isBold ? 'bold' : 'normal',
+                    fontStyle: isItalic ? 'italic' : 'normal',
+                    border: isBubble ? (explicitColor ? `1.5px solid ${explicitColor}` : undefined) : 'none',
+                    borderBottom: !isBubble && explicitColor ? `2.5px solid ${explicitColor}` : undefined,
+                  }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    setSelectedNodeId(lNode.id);
+                  }}
+                  onDoubleClick={e => {
+                    e.stopPropagation();
+                    setSelectedNodeId(lNode.id);
+                    setEditingNodeId(lNode.id);
+                  }}
+                >
+                  {/* Node Icons */}
+                  {node.icons.length > 0 && (
+                    <span className="node-icons">
+                      {node.icons.map((ic, idx) => (
+                        <span key={idx} className="node-icon-badge" title={ic.builtin}>
+                          {renderIconBadge(ic.builtin)}
+                        </span>
+                      ))}
+                    </span>
+                  )}
 
-                {/* Node Text / Inline Editor */}
-                {isEditing ? (
-                  <input
-                    type="text"
-                    className="node-text-input"
-                    value={editingText}
-                    autoFocus
-                    onChange={e => setEditingText(e.target.value)}
-                    onBlur={commitEditing}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        commitEditing();
-                      } else if (e.key === 'Escape') {
-                        setEditingNodeId(null);
-                      }
-                    }}
-                    onClick={e => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="node-text">
-                    {node.htmlContent ? (
-                      <span
-                        className="node-html-content"
-                        dangerouslySetInnerHTML={{ __html: node.htmlContent }}
-                      />
-                    ) : (
-                      node.text || ' '
-                    )}
-                  </span>
-                )}
+                  {/* Node Text / Inline Editor */}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      className="node-text-input"
+                      value={editingText}
+                      autoFocus
+                      onChange={e => setEditingText(e.target.value)}
+                      onBlur={commitEditing}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          commitEditing();
+                        } else if (e.key === 'Escape') {
+                          setEditingNodeId(null);
+                        }
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="node-text">
+                      {node.htmlContent ? (
+                        <span
+                          className="node-html-content"
+                          dangerouslySetInnerHTML={{ __html: node.htmlContent }}
+                        />
+                      ) : (
+                        node.text || ' '
+                      )}
+                    </span>
+                  )}
 
-                {/* Link Icon */}
-                {node.link && (
-                  <a
-                    href={node.link.startsWith('forest://') ? '#' : node.link}
-                    target={node.link.startsWith('forest://') ? undefined : '_blank'}
-                    rel="noopener noreferrer"
-                    className="node-link-btn"
-                    title={`リンクを開く: ${node.link}`}
-                    onClick={e => {
-                      e.stopPropagation();
-                      if (node.link?.startsWith('forest://') && onNavigateTab) {
-                        e.preventDefault();
-                        onNavigateTab(node.link.replace('forest://', ''));
-                      }
-                    }}
-                  >
-                    <ExternalLink size={12} />
-                  </a>
-                )}
+                  {/* Link Icon */}
+                  {node.link && (
+                    <a
+                      href={node.link.startsWith('forest://') ? '#' : node.link}
+                      target={node.link.startsWith('forest://') ? undefined : '_blank'}
+                      rel="noopener noreferrer"
+                      className="node-link-btn"
+                      title={`リンクを開く: ${node.link}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (node.link?.startsWith('forest://') && onNavigateTab) {
+                          e.preventDefault();
+                          onNavigateTab(node.link.replace('forest://', ''));
+                        }
+                      }}
+                    >
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
 
-                {/* Note Indicator */}
-                {node.noteHtml && (
-                  <span className="node-note-indicator" title="ノートあり">
-                    <FileText size={12} />
-                  </span>
-                )}
+                  {/* Note Indicator */}
+                  {node.noteHtml && (
+                    <span className="node-note-indicator" title="ノートあり">
+                      <FileText size={12} />
+                    </span>
+                  )}
 
-                {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
-                {hasChildren && (!isRoot || node.folded) && (
-                  <button
-                    className={`fold-handle ${node.folded ? 'folded' : 'unfolded'}`}
-                    title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}
-                    onClick={e => {
-                      e.stopPropagation();
-                      onToggleFold(lNode.id);
-                    }}
-                  >
-                    {node.folded ? (
-                      lNode.side === 'left' ? <ChevronLeft size={10} /> : <ChevronRight size={10} />
-                    ) : (
-                      <span className="fold-dot" />
-                    )}
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                  {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
+                  {hasChildren && (!isRoot || node.folded) && (
+                    <button
+                      className={`fold-handle ${node.folded ? 'folded' : 'unfolded'}`}
+                      title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onToggleFold(lNode.id);
+                      }}
+                    >
+                      {node.folded ? (
+                        lNode.side === 'left' ? <ChevronLeft size={10} /> : <ChevronRight size={10} />
+                      ) : (
+                        <span className="fold-dot" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
     </div>

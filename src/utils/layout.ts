@@ -281,6 +281,18 @@ function deriveCloudStrokeColor(hexColor: string): string {
   return `hsl(${Math.round(h)}, ${Math.round(strokeS * 100)}%, ${Math.round(strokeL * 100)}%)`;
 }
 
+interface Point2D {
+  x: number;
+  y: number;
+}
+
+interface Box2D {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 /**
  * Generate a fluffy, scalloped SVG cloud path around a bounding box.
  */
@@ -291,77 +303,219 @@ export function generateCloudPath(
   height: number,
   nestingLevel: number = 0
 ): string {
-  const r = Math.min(28, width / 3.5, height / 3.5);
-  const wEdge = Math.max(0, width - 2 * r);
-  const hEdge = Math.max(0, height - 2 * r);
-  const arcLen = (Math.PI * r) / 2;
-  const totalLen = 2 * wEdge + 2 * hEdge + 4 * arcLen;
+  if (width <= 0 || height <= 0) return '';
+  return generateCloudPathFromPolygon(
+    [
+      { x, y },
+      { x: x + width, y },
+      { x: x + width, y: y + height },
+      { x, y: y + height },
+    ],
+    nestingLevel
+  );
+}
 
-  if (totalLen <= 0) return '';
+/**
+ * Compute upper (min-y) and lower (max-y) convex hull chains from candidate points,
+ * returning a clockwise convex polygon enclosing all points.
+ */
+function buildConvexCloudPolygon(upperCandidates: Point2D[], lowerCandidates: Point2D[]): Point2D[] {
+  const dedupeByX = (pts: Point2D[], pickMinY: boolean): Point2D[] => {
+    const sorted = [...pts].sort((a, b) => a.x - b.x || (pickMinY ? a.y - b.y : b.y - a.y));
+    const result: Point2D[] = [];
+    for (const p of sorted) {
+      if (result.length === 0 || Math.abs(p.x - result[result.length - 1].x) > 0.5) {
+        result.push(p);
+      }
+    }
+    return result;
+  };
+
+  const cross = (o: Point2D, a: Point2D, b: Point2D) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+  const upperPts = dedupeByX(upperCandidates, true);
+  const upper: Point2D[] = [];
+  for (const p of upperPts) {
+    // Upper hull in screen coords (y-down): keep clockwise turns (cross > 0)
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  const lowerPts = dedupeByX(lowerCandidates, false);
+  const lower: Point2D[] = [];
+  for (const p of lowerPts) {
+    // Lower hull in screen coords (y-down): keep counter-clockwise turns left-to-right (cross < 0)
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) >= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+
+  const combined = [...upper, ...lower.reverse()];
+  const cleaned: Point2D[] = [];
+  for (const p of combined) {
+    const prev = cleaned[cleaned.length - 1];
+    if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+      cleaned.push(p);
+    }
+  }
+  if (cleaned.length > 1) {
+    const first = cleaned[0];
+    const last = cleaned[cleaned.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y) <= 0.5) {
+      cleaned.pop();
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Generate a fluffy, scalloped SVG cloud path around a clockwise convex polygon.
+ */
+export function generateCloudPathFromPolygon(
+  rawVertices: Point2D[],
+  nestingLevel: number = 0
+): string {
+  if (rawVertices.length < 3) return '';
+
+  // Remove nearly collinear intermediate vertices
+  const vertices: Point2D[] = [];
+  const m = rawVertices.length;
+  for (let i = 0; i < m; i++) {
+    const prev = rawVertices[(i - 1 + m) % m];
+    const curr = rawVertices[i];
+    const next = rawVertices[(i + 1) % m];
+    const v1x = curr.x - prev.x;
+    const v1y = curr.y - prev.y;
+    const v2x = next.x - curr.x;
+    const v2y = next.y - curr.y;
+    const l1 = Math.hypot(v1x, v1y);
+    const l2 = Math.hypot(v2x, v2y);
+    if (l1 < 0.5 || l2 < 0.5) continue;
+    const dot = (v1x * v2x + v1y * v2y) / (l1 * l2);
+    if (dot < 0.999) {
+      vertices.push(curr);
+    }
+  }
+
+  const n = vertices.length;
+  if (n < 3) return '';
+
+  const edgeLens: number[] = [];
+  const edgeDirs: Point2D[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i];
+    const b = vertices[(i + 1) % n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    edgeLens.push(len);
+    edgeDirs.push(len > 0 ? { x: dx / len, y: dy / len } : { x: 1, y: 0 });
+  }
+
+  const baseCornerR = 26;
+  const cornerAlphas: number[] = [];
+  const trims: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const uIn = edgeDirs[(i - 1 + n) % n];
+    const uOut = edgeDirs[i];
+    const dot = Math.max(-0.999, Math.min(0.999, uIn.x * uOut.x + uIn.y * uOut.y));
+    const alpha = Math.acos(dot);
+    cornerAlphas.push(alpha);
+    const tanHalf = Math.tan(alpha / 2);
+    trims.push(tanHalf > 0.01 ? baseCornerR * tanHalf : 0);
+  }
+
+  // Clamp trims so adjacent corners never overlap on an edge
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    const sum = trims[i] + trims[next];
+    const maxAllowed = edgeLens[i] * 0.92;
+    if (sum > maxAllowed && sum > 0) {
+      const scale = maxAllowed / sum;
+      trims[i] *= scale;
+      trims[next] *= scale;
+    }
+  }
+
+  interface PerimeterSegment {
+    len: number;
+    sample: (d: number) => { px: number; py: number; nx: number; ny: number };
+  }
+
+  const segments: PerimeterSegment[] = [];
+  let totalLen = 0;
+
+  for (let i = 0; i < n; i++) {
+    const uIn = edgeDirs[(i - 1 + n) % n];
+    const uOut = edgeDirs[i];
+    const trim = trims[i];
+    const alpha = cornerAlphas[i];
+    const tanHalf = Math.tan(alpha / 2);
+    const r = tanHalf > 0.01 ? trim / tanHalf : 0;
+
+    // 1. Rounded corner at vertex[i]
+    if (r > 0.5 && alpha > 0.01) {
+      const arcStartX = vertices[i].x - uIn.x * trim;
+      const arcStartY = vertices[i].y - uIn.y * trim;
+      const nInX = uIn.y;
+      const nInY = -uIn.x;
+      const centerX = arcStartX - nInX * r;
+      const centerY = arcStartY - nInY * r;
+      const thetaStart = Math.atan2(nInY, nInX);
+      const arcLen = r * alpha;
+      segments.push({
+        len: arcLen,
+        sample: (d: number) => {
+          const theta = thetaStart + d / r;
+          const cos = Math.cos(theta);
+          const sin = Math.sin(theta);
+          return {
+            px: centerX + r * cos,
+            py: centerY + r * sin,
+            nx: cos,
+            ny: sin,
+          };
+        },
+      });
+      totalLen += arcLen;
+    }
+
+    // 2. Straight edge from vertex[i] to vertex[(i + 1) % n]
+    const nextIdx = (i + 1) % n;
+    const straightLen = Math.max(0, edgeLens[i] - trims[i] - trims[nextIdx]);
+    if (straightLen > 0.5) {
+      const startX = vertices[i].x + uOut.x * trims[i];
+      const startY = vertices[i].y + uOut.y * trims[i];
+      const nx = uOut.y;
+      const ny = -uOut.x;
+      segments.push({
+        len: straightLen,
+        sample: (d: number) => ({
+          px: startX + uOut.x * d,
+          py: startY + uOut.y * d,
+          nx,
+          ny,
+        }),
+      });
+      totalLen += straightLen;
+    }
+  }
+
+  if (totalLen <= 0 || segments.length === 0) return '';
 
   const samplePerimeter = (s: number): { px: number; py: number; nx: number; ny: number } => {
     let d = ((s % totalLen) + totalLen) % totalLen;
-
-    // 1. Top edge (left -> right)
-    if (d < wEdge) {
-      return { px: x + r + d, py: y, nx: 0, ny: -1 };
+    for (const seg of segments) {
+      if (d <= seg.len) {
+        return seg.sample(d);
+      }
+      d -= seg.len;
     }
-    d -= wEdge;
-
-    // 2. Top-right corner
-    if (d < arcLen && r > 0) {
-      const theta = -Math.PI / 2 + d / r;
-      const cos = Math.cos(theta);
-      const sin = Math.sin(theta);
-      return { px: x + width - r + r * cos, py: y + r + r * sin, nx: cos, ny: sin };
-    }
-    d -= arcLen;
-
-    // 3. Right edge (top -> bottom)
-    if (d < hEdge) {
-      return { px: x + width, py: y + r + d, nx: 1, ny: 0 };
-    }
-    d -= hEdge;
-
-    // 4. Bottom-right corner
-    if (d < arcLen && r > 0) {
-      const theta = d / r;
-      const cos = Math.cos(theta);
-      const sin = Math.sin(theta);
-      return { px: x + width - r + r * cos, py: y + height - r + r * sin, nx: cos, ny: sin };
-    }
-    d -= arcLen;
-
-    // 5. Bottom edge (right -> left)
-    if (d < wEdge) {
-      return { px: x + width - r - d, py: y + height, nx: 0, ny: 1 };
-    }
-    d -= wEdge;
-
-    // 6. Bottom-left corner
-    if (d < arcLen && r > 0) {
-      const theta = Math.PI / 2 + d / r;
-      const cos = Math.cos(theta);
-      const sin = Math.sin(theta);
-      return { px: x + r + r * cos, py: y + height - r + r * sin, nx: cos, ny: sin };
-    }
-    d -= arcLen;
-
-    // 7. Left edge (bottom -> top)
-    if (d < hEdge) {
-      return { px: x, py: y + height - r - d, nx: -1, ny: 0 };
-    }
-    d -= hEdge;
-
-    // 8. Top-left corner
-    if (r > 0) {
-      const theta = Math.PI + d / r;
-      const cos = Math.cos(theta);
-      const sin = Math.sin(theta);
-      return { px: x + r + r * cos, py: y + r + r * sin, nx: cos, ny: sin };
-    }
-
-    return { px: x + r, py: y, nx: 0, ny: -1 };
+    return segments[0].sample(0);
   };
 
   const numPuffs = Math.max(8, Math.round(totalLen / 38));
@@ -408,11 +562,18 @@ function computeNodeBoundsAndClouds(
   lNode: LayoutNode,
   ancestorCloudColors: string[],
   clouds: RenderCloud[]
-): { minX: number; maxX: number; minY: number; maxY: number } {
-  let minX = lNode.x - lNode.width / 2;
-  let maxX = lNode.x + lNode.width / 2;
-  let minY = lNode.y - lNode.height / 2;
-  let maxY = lNode.y + lNode.height / 2;
+): Box2D & { boxes: Box2D[] } {
+  const selfBox: Box2D = {
+    minX: lNode.x - lNode.width / 2,
+    maxX: lNode.x + lNode.width / 2,
+    minY: lNode.y - lNode.height / 2,
+    maxY: lNode.y + lNode.height / 2,
+  };
+
+  let minX = selfBox.minX;
+  let maxX = selfBox.maxX;
+  let minY = selfBox.minY;
+  let maxY = selfBox.maxY;
 
   const hasCloud = Boolean(lNode.node.cloud);
   const nestingLevel = ancestorCloudColors.length;
@@ -439,12 +600,14 @@ function computeNodeBoundsAndClouds(
     ? [...ancestorCloudColors, effectiveColor]
     : ancestorCloudColors;
 
+  const descendantBoxes: Box2D[] = [];
   for (const child of lNode.children) {
-    const childBounds = computeNodeBoundsAndClouds(child, nextAncestorColors, clouds);
-    minX = Math.min(minX, childBounds.minX);
-    maxX = Math.max(maxX, childBounds.maxX);
-    minY = Math.min(minY, childBounds.minY);
-    maxY = Math.max(maxY, childBounds.maxY);
+    const childResult = computeNodeBoundsAndClouds(child, nextAncestorColors, clouds);
+    minX = Math.min(minX, childResult.minX);
+    maxX = Math.max(maxX, childResult.maxX);
+    minY = Math.min(minY, childResult.minY);
+    maxY = Math.max(maxY, childResult.maxY);
+    descendantBoxes.push(...childResult.boxes);
   }
 
   if (hasCloud) {
@@ -455,6 +618,74 @@ function computeNodeBoundsAndClouds(
     const cw = maxX - minX + padX * 2;
     const ch = maxY - minY + padY * 2;
 
+    // Determine direction for trapezoid cloud shape (parent node as the narrower base)
+    let dir: 'right' | 'left' | 'both' = 'both';
+    if (lNode.children.length > 0) {
+      if (lNode.side === 'right' || lNode.side === 'left') {
+        dir = lNode.side;
+      } else {
+        const allRight = lNode.children.every(c => c.side === 'right');
+        const allLeft = lNode.children.every(c => c.side === 'left');
+        if (allRight) dir = 'right';
+        else if (allLeft) dir = 'left';
+      }
+    }
+
+    let d = '';
+    if (dir === 'right') {
+      const pLeft = selfBox.minX - padX;
+      const pRight = selfBox.maxX + padX;
+      const pTop = selfBox.minY - padY;
+      const pBottom = selfBox.maxY + padY;
+      const xRight = maxX + padX;
+      const gTop = minY - padY;
+      const gBottom = maxY + padY;
+
+      const upperCandidates: Point2D[] = [
+        { x: pLeft, y: pTop },
+        { x: pRight, y: pTop },
+        ...descendantBoxes.map(b => ({ x: Math.max(pLeft, b.minX - padX), y: b.minY - padY })),
+        { x: xRight, y: gTop },
+      ];
+      const lowerCandidates: Point2D[] = [
+        { x: pLeft, y: pBottom },
+        { x: pRight, y: pBottom },
+        ...descendantBoxes.map(b => ({ x: Math.max(pLeft, b.minX - padX), y: b.maxY + padY })),
+        { x: xRight, y: gBottom },
+      ];
+      d = generateCloudPathFromPolygon(
+        buildConvexCloudPolygon(upperCandidates, lowerCandidates),
+        nestingLevel
+      );
+    } else if (dir === 'left') {
+      const pLeft = selfBox.minX - padX;
+      const pRight = selfBox.maxX + padX;
+      const pTop = selfBox.minY - padY;
+      const pBottom = selfBox.maxY + padY;
+      const xLeft = minX - padX;
+      const gTop = minY - padY;
+      const gBottom = maxY + padY;
+
+      const upperCandidates: Point2D[] = [
+        { x: xLeft, y: gTop },
+        ...descendantBoxes.map(b => ({ x: Math.min(pRight, b.maxX + padX), y: b.minY - padY })),
+        { x: pLeft, y: pTop },
+        { x: pRight, y: pTop },
+      ];
+      const lowerCandidates: Point2D[] = [
+        { x: xLeft, y: gBottom },
+        ...descendantBoxes.map(b => ({ x: Math.min(pRight, b.maxX + padX), y: b.maxY + padY })),
+        { x: pLeft, y: pBottom },
+        { x: pRight, y: pBottom },
+      ];
+      d = generateCloudPathFromPolygon(
+        buildConvexCloudPolygon(upperCandidates, lowerCandidates),
+        nestingLevel
+      );
+    } else {
+      d = generateCloudPath(cx, cy, cw, ch, nestingLevel);
+    }
+
     clouds.push({
       id: lNode.id,
       color: effectiveColor,
@@ -463,7 +694,7 @@ function computeNodeBoundsAndClouds(
       y: cy,
       width: cw,
       height: ch,
-      d: generateCloudPath(cx, cy, cw, ch, nestingLevel),
+      d,
       depth: lNode.depth,
       nestingLevel,
     });
@@ -473,9 +704,10 @@ function computeNodeBoundsAndClouds(
     maxX = cx + cw + 8;
     minY = cy - 8;
     maxY = cy + ch + 8;
+    return { minX, maxX, minY, maxY, boxes: [{ minX, maxX, minY, maxY }] };
   }
 
-  return { minX, maxX, minY, maxY };
+  return { minX, maxX, minY, maxY, boxes: [selfBox, ...descendantBoxes] };
 }
 
 interface SubtreeSize {

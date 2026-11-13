@@ -378,9 +378,9 @@ body {
 
 /* FreeMind Fork Style (Underline) */
 .mindmap-node.style-fork {
+  color: #2d3748;
   background-color: var(--bg-surface);
-  border-bottom-width: 2.5px;
-  border-bottom-style: solid;
+  border-bottom: 2.5px solid #2d3748;
   border-radius: 4px;
   padding: 4px 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -388,8 +388,8 @@ body {
 
 /* Bubble Style */
 .mindmap-node.style-bubble {
-  border-width: 1.5px;
-  border-style: solid;
+  color: #2d3748;
+  border: 1.5px solid #2d3748;
   border-radius: 9999px;
   background-color: #ffffff;
   padding: 4px 14px;
@@ -398,8 +398,9 @@ body {
 
 /* Root Node */
 .mindmap-node.root-node {
-  border-width: 2px;
-  border-style: solid;
+  color: #1a365d;
+  background-color: #ebf8ff;
+  border: 1.5px solid #1a365d;
   border-radius: 9999px;
   padding: 8px 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -412,6 +413,7 @@ body {
   outline-offset: 3px;
   border-radius: 4px;
 }
+
 .mindmap-node.drag-target {
   outline: 2.5px dashed #059669 !important;
   outline-offset: 4px;
@@ -446,11 +448,13 @@ body {
     opacity: 0;
     transform: translate(-50%, -4px) scale(0.92);
   }
+
   to {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
   }
 }
+
 .mindmap-node.style-bubble.selected,
 .mindmap-node.root-node.selected {
   border-radius: 9999px;
@@ -1442,8 +1446,13 @@ body {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .scan-status-text {
@@ -1926,9 +1935,11 @@ body {
   0% {
     box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7), 0 8px 24px rgba(139, 92, 246, 0.3);
   }
+
   70% {
     box-shadow: 0 0 0 16px rgba(139, 92, 246, 0), 0 8px 24px rgba(139, 92, 246, 0.2);
   }
+
   100% {
     box-shadow: 0 0 0 0 rgba(139, 92, 246, 0), 0 8px 24px rgba(139, 92, 246, 0.2);
   }
@@ -1939,10 +1950,12 @@ body {
     scale: 0.75;
     opacity: 0.3;
   }
+
   65% {
     scale: 1.06;
     opacity: 1;
   }
+
   100% {
     scale: 1;
     opacity: 1;
@@ -1967,6 +1980,7 @@ body {
     opacity: 0;
     transform: translate(-50%, 20px) scale(0.96);
   }
+
   to {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
@@ -2314,6 +2328,7 @@ body {
     opacity: 0;
     transform: translateY(12px) scale(0.94);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -2383,18 +2398,24 @@ body {
 
 .app-container.theme-dark .mindmap-node.style-fork {
   color: #f1f5f9;
+  background-color: rgba(15, 23, 42, 0.72);
+  border-bottom-color: #64748b;
 }
 
 .app-container.theme-dark .mindmap-node.style-bubble {
   background-color: #1e293b;
   color: #f1f5f9;
-  border-color: #475569;
+  border-color: #64748b;
 }
 
 .app-container.theme-dark .mindmap-node.root-node {
   background-color: #064e3b;
   color: #ecfdf5;
-  border-color: #059669;
+  border-color: #10b981;
+}
+
+.app-container.theme-dark.presentation-cinema .mindmap-canvas-container {
+  background: radial-gradient(circle at 50% 45%, #162032 0%, #0b0f17 65%, #05080f 100%);
 }
 
 .app-container.theme-dark .tab-item {
@@ -2453,6 +2474,110 @@ body {
 .app-container.theme-dark .mindmap-cloud {
   fill-opacity: 0.28;
   stroke-opacity: 0.9;
+}
+
+/* Dark Theme: Export Dropdown */
+.app-container.theme-dark .export-menu {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.app-container.theme-dark .export-menu-item:hover {
+  background-color: #1f2937;
+}
+
+.app-container.theme-dark .export-menu-item strong {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .export-menu-item p {
+  color: #94a3b8;
+}
+
+/* Dark Theme: Forest Overview */
+.app-container.theme-dark .forest-overview-overlay {
+  background-color: #0b0f17;
+}
+
+.app-container.theme-dark .forest-header,
+.app-container.theme-dark .forest-search-box,
+.app-container.theme-dark .forest-search-results,
+.app-container.theme-dark .forest-tree-card {
+  background-color: #111827;
+  border-color: #1f2937;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .forest-title-group h2,
+.app-container.theme-dark .forest-section-title h3,
+.app-container.theme-dark .forest-card-title,
+.app-container.theme-dark .result-node-title {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .forest-search-input {
+  background-color: transparent;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .search-result-card {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.app-container.theme-dark .search-result-card:hover {
+  background-color: #283548;
+}
+
+.app-container.theme-dark .forest-tree-card.active {
+  border-color: #10b981;
+  background-color: #0f2922;
+}
+
+/* Dark Theme: FreeMindSearcher Modal */
+.app-container.theme-dark .searcher-modal-header {
+  background-color: #111827;
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .searcher-modal-body {
+  background-color: #0b0f17;
+}
+
+.app-container.theme-dark .searcher-scan-bar,
+.app-container.theme-dark .searcher-filter-card,
+.app-container.theme-dark .searcher-results-container {
+  background-color: #111827;
+  border-color: #1f2937;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .filter-input-wrap,
+.app-container.theme-dark .filter-date-input,
+.app-container.theme-dark .filter-select-input,
+.app-container.theme-dark .results-header-bar {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .filter-text-input {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .searcher-table th {
+  background-color: #1f2937;
+  color: #cbd5e1;
+  border-color: #374151;
+}
+
+.app-container.theme-dark .searcher-table td {
+  border-color: #1f2937;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .searcher-table tr:hover td {
+  background-color: #1e293b;
 }
 
 /* ==========================================================================

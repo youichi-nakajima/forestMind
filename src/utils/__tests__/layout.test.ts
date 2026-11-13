@@ -73,5 +73,67 @@ describe('layout: fluffy clouds & nested cloud distinction', () => {
     expect(inner.color.toLowerCase()).not.toBe(outer.color.toLowerCase());
     expect(inner.strokeColor).not.toBe(outer.strokeColor);
   });
+
+  it('shapes directional clouds as a trapezoid narrower at the parent side than the descendant side', () => {
+    const gc1 = makeNode('gc1', 'Grandchild 1');
+    const gc2 = makeNode('gc2', 'Grandchild 2');
+    const gc3 = makeNode('gc3', 'Grandchild 3');
+    const cRight = makeNode('cr', 'Right Parent', [gc1, gc2, gc3], '#e0f2fe');
+    const gc4 = makeNode('gc4', 'Grandchild 4');
+    const gc5 = makeNode('gc5', 'Grandchild 5');
+    const gc6 = makeNode('gc6', 'Grandchild 6');
+    const cLeft = makeNode('cl', 'Left Parent', [gc4, gc5, gc6], '#dcfce7');
+    cLeft.position = 'left';
+    cRight.position = 'right';
+    const root = makeNode('root', 'Root', [cRight, cLeft]);
+
+    const { clouds, layoutNodes } = computeLayout(root);
+    const rightCloud = clouds.find(c => c.id === 'cr')!;
+    const leftCloud = clouds.find(c => c.id === 'cl')!;
+    expect(rightCloud).toBeDefined();
+    expect(leftCloud).toBeDefined();
+
+    // Parse all endpoint coordinates (M x y / C ... x y) from the SVG path
+    const extractPoints = (d: string) => {
+      const pts: Array<{ x: number; y: number }> = [];
+      const tokens = d.match(/[MC]|-?\d+(?:\.\d+)?/g) || [];
+      let i = 0;
+      while (i < tokens.length) {
+        if (tokens[i] === 'M') {
+          pts.push({ x: parseFloat(tokens[i + 1]), y: parseFloat(tokens[i + 2]) });
+          i += 3;
+        } else if (tokens[i] === 'C') {
+          pts.push({ x: parseFloat(tokens[i + 5]), y: parseFloat(tokens[i + 6]) });
+          i += 7;
+        } else {
+          i += 1;
+        }
+      }
+      return pts;
+    };
+
+    const spanY = (pts: Array<{ x: number; y: number }>) => {
+      const ys = pts.map(p => p.y);
+      return Math.max(...ys) - Math.min(...ys);
+    };
+
+    // Right-expanding cloud: parent side (left) is narrower than descendant side (right)
+    const rParent = layoutNodes.get('cr')!;
+    const rPts = extractPoints(rightCloud.d);
+    const rParentSide = rPts.filter(p => p.x <= rParent.x);
+    const rDescSide = rPts.filter(p => p.x >= rParent.x + rParent.width / 2 + 40);
+    expect(rParentSide.length).toBeGreaterThan(0);
+    expect(rDescSide.length).toBeGreaterThan(0);
+    expect(spanY(rParentSide)).toBeLessThan(spanY(rDescSide) * 0.75);
+
+    // Left-expanding cloud: parent side (right) is narrower than descendant side (left)
+    const lParent = layoutNodes.get('cl')!;
+    const lPts = extractPoints(leftCloud.d);
+    const lParentSide = lPts.filter(p => p.x >= lParent.x);
+    const lDescSide = lPts.filter(p => p.x <= lParent.x - lParent.width / 2 - 40);
+    expect(lParentSide.length).toBeGreaterThan(0);
+    expect(lDescSide.length).toBeGreaterThan(0);
+    expect(spanY(lParentSide)).toBeLessThan(spanY(lDescSide) * 0.75);
+  });
 });
 

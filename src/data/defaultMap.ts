@@ -181,7 +181,7 @@ export const initialFreeMindMap: FreeMindMap = {
           },
           {
             id: 'ID_L1_2',
-            text: 'forest:// リンクによるマップ間ジャンプ',
+            text: '全タブ横断のキーワード検索 & 該当ノードへジャンプ',
             icons: [],
             attributes: [],
             arrowLinks: [],

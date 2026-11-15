@@ -180,20 +180,34 @@ export const App: React.FC = () => {
     },
   });
 
+  const handleStopPresentation = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    setIsCinemaMode(false);
+    stopPresentation();
+  }, [stopPresentation]);
+
+  // Ensure fullscreen / cinema mode always exits when leaving presentation mode
+  useEffect(() => {
+    if (!isPresentationActive) {
+      setIsCinemaMode(false);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, [isPresentationActive]);
+
   // Toggle presentation via F5 or button
   const handleTogglePresentation = useCallback(() => {
     resumeAudioContext();
     if (isPresentationActive) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-      setIsCinemaMode(false);
-      stopPresentation();
+      handleStopPresentation();
     } else {
       setIsForestViewOpen(false);
       startPresentation();
     }
-  }, [isPresentationActive, startPresentation, stopPresentation]);
+  }, [isPresentationActive, handleStopPresentation, startPresentation]);
 
   // Global F5 key listener
   useEffect(() => {
@@ -658,7 +672,7 @@ export const App: React.FC = () => {
                 onNext={nextPresentationStep}
                 onPrev={prevPresentationStep}
                 onReset={() => goToPresentationStep(0)}
-                onClose={stopPresentation}
+                onClose={handleStopPresentation}
                 currentStepIndex={currentStepIndex}
                 totalSteps={presentationSteps.length}
                 currentStep={activePresentationStep}

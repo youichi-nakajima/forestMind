@@ -16,6 +16,7 @@ const SHORTCUT_GROUPS = [
       { key: 'Ctrl + D', desc: '選択ノードを複製 (Duplicate)' },
       { key: 'Alt + ↑ / ↓', desc: '兄弟ノードの順番を上下に入れ替え' },
       { key: 'F2 / ダブルクリック', desc: 'インラインテキスト編集' },
+      { key: 'Esc (新規作成直後)', desc: '作成した新規ノードを削除してキャンセル' },
       { key: 'Delete / Backspace', desc: '選択ノードを削除' },
       { key: 'ドラッグ＆ドロップ', desc: 'ノードを別の親ノードへ移動' },
     ],

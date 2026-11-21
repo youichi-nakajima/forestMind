@@ -11,6 +11,7 @@ interface MindMapCanvasProps {
   setSelectedNodeId: (id: string | null) => void;
   editingNodeId: string | null;
   setEditingNodeId: (id: string | null) => void;
+  onCancelEditing?: () => void;
   onAddChild: (parentId: string) => void;
   onAddSibling: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
@@ -47,6 +48,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   setSelectedNodeId,
   editingNodeId,
   setEditingNodeId,
+  onCancelEditing,
   onAddChild,
   onAddSibling,
   onDeleteNode,
@@ -158,6 +160,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   }, [isPresentationActive, autoCenter, activeNodeId, layoutNodes, zoomScale, setPanOffset]);
 
   const initializedEditIdRef = useRef<string | null>(null);
+  const skipBlurCommitRef = useRef(false);
 
   // Sync editing text when editing starts
   useEffect(() => {
@@ -166,9 +169,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       return;
     }
     if (initializedEditIdRef.current === editingNodeId) return;
+    initializedEditIdRef.current = editingNodeId;
+    skipBlurCommitRef.current = false;
     const target = layoutNodes.get(editingNodeId);
     if (target) {
-      initializedEditIdRef.current = editingNodeId;
       const rawText = target.node.text || '';
       setEditingText(rawText === '新規ノード' ? '' : rawText);
     }
@@ -399,6 +403,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   }, [handleKeyDown]);
 
   const commitEditing = () => {
+    skipBlurCommitRef.current = true;
     if (editingNodeId) {
       onUpdateText(editingNodeId, editingText);
       setEditingNodeId(null);
@@ -685,12 +690,24 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       value={editingText}
                       autoFocus
                       onChange={e => setEditingText(e.target.value)}
-                      onBlur={commitEditing}
+                      onBlur={() => {
+                        if (skipBlurCommitRef.current) return;
+                        commitEditing();
+                      }}
                       onKeyDown={e => {
+                        if (e.nativeEvent.isComposing) return;
                         if (e.key === 'Enter') {
+                          e.preventDefault();
                           commitEditing();
                         } else if (e.key === 'Escape') {
-                          setEditingNodeId(null);
+                          e.preventDefault();
+                          e.stopPropagation();
+                          skipBlurCommitRef.current = true;
+                          if (onCancelEditing) {
+                            onCancelEditing();
+                          } else {
+                            setEditingNodeId(null);
+                          }
                         }
                       }}
                       onClick={e => e.stopPropagation()}

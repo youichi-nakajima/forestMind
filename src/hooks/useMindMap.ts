@@ -4,6 +4,16 @@ import { initialFreeMindMap } from '../data/defaultMap';
 import { generateNodeId, parseFreeMindXml } from '../parser/freemindParser';
 import { serializeFreeMindXml } from '../parser/freemindSerializer';
 import { serializeSubtreeToMarkdown, parseMarkdownToSubtree } from '../utils/markdownUtils';
+import {
+  STORAGE_KEY_ACTIVE_TAB,
+  loadTabsFromStorage,
+  persistTabsToStorage,
+} from '../utils/tabStorage';
+import {
+  PendingNewNodeEdit,
+  cancelPendingNewNodeOnTab,
+  commitPendingNewNodeTextOnTab,
+} from '../utils/pendingNodeEdit';
 
 export interface MapTab {
   id: string;
@@ -17,69 +27,64 @@ export interface MapTab {
   savedPastLength?: number;
 }
 
-const STORAGE_KEY_TABS = 'forestmind_saved_tabs_v2';
-const STORAGE_KEY_ACTIVE_TAB = 'forestmind_active_tab_id_v2';
+function parseFileContentToMap(
+  content: string,
+  fileNameOrPath?: string
+): { map: FreeMindMap; fallbackTitle?: string } {
+  const lowerName = (fileNameOrPath || '').toLowerCase();
+  if (lowerName.endsWith('.md') || lowerName.endsWith('.txt')) {
+    const baseName = (fileNameOrPath || 'Markdown').split(/[\\/]/).pop() || 'Markdown';
+    const rootTitle = baseName.replace(/\.(md|txt)$/i, '');
+    const rootChildren = parseMarkdownToSubtree(content);
+    const newMap: FreeMindMap = {
+      version: '1.0.1',
+      root: {
+        id: generateNodeId(),
+        text: rootTitle,
+        style: 'bubble',
+        font: { size: 16, bold: true },
+        icons: [],
+        attributes: [],
+        arrowLinks: [],
+        hooks: [],
+        children: rootChildren,
+      },
+    };
+    return { map: newMap, fallbackTitle: rootTitle };
+  }
+
+  const parsed = parseFreeMindXml(content);
+  const baseName = fileNameOrPath?.split(/[\\/]/).pop();
+  return { map: parsed, fallbackTitle: parsed.root.text || baseName };
+}
 
 export function useMindMap() {
-  const [tabs, setTabs] = useState<MapTab[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_TABS);
-      if (saved) {
-        const parsed = JSON.parse(saved) as {
-          id: string;
-          title: string;
-          filePath?: string;
-          isDirty?: boolean;
-          xml: string;
-        }[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(t => {
-            const mapObj = parseFreeMindXml(t.xml);
-            const dirty = Boolean(t.isDirty);
-            return {
-              id: t.id,
-              title: t.title || mapObj.root.text || '無題マップ',
-              filePath: t.filePath,
-              map: mapObj,
-              past: [],
-              future: [],
-              selectedNodeId: mapObj.root.id,
-              isDirty: dirty,
-              savedPastLength: dirty ? undefined : 0,
-            };
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load tabs from localStorage:', e);
-    }
-
-    return [
-      {
-        id: 'tab_default',
-        title: initialFreeMindMap.root.text || 'forestMind',
-        map: initialFreeMindMap,
-        past: [],
-        future: [],
-        selectedNodeId: initialFreeMindMap.root.id,
-        isDirty: false,
-        savedPastLength: 0,
-      },
-    ];
-  });
+  const [initialLoad] = useState(() => loadTabsFromStorage());
+  const [tabs, setTabs] = useState<MapTab[]>(initialLoad.tabs);
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
     const savedActive = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB);
-    if (savedActive && tabs.some(t => t.id === savedActive)) {
+    if (savedActive && initialLoad.tabs.some(t => t.id === savedActive)) {
       return savedActive;
     }
-    return tabs[0]?.id || 'tab_default';
+    return initialLoad.tabs[0]?.id || 'tab_default';
   });
+
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
   const map = activeTab.map;
   const selectedNodeId = activeTab.selectedNodeId;
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeIdRaw] = useState<string | null>(null);
+  const pendingNewNodeRef = useRef<PendingNewNodeEdit | null>(null);
+
+  const setEditingNodeId = useCallback((nextId: string | null) => {
+    if (pendingNewNodeRef.current && pendingNewNodeRef.current.nodeId !== nextId) {
+      pendingNewNodeRef.current = null;
+    }
+    setEditingNodeIdRaw(nextId);
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,19 +92,7 @@ export function useMindMap() {
 
   // Auto-save to localStorage
   useEffect(() => {
-    try {
-      const serializedTabs = tabs.map(t => ({
-        id: t.id,
-        title: t.map.root.text || t.title,
-        filePath: t.filePath,
-        isDirty: Boolean(t.isDirty),
-        xml: serializeFreeMindXml(t.map),
-      }));
-      localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(serializedTabs));
-      localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, activeTabId);
-    } catch (e) {
-      console.warn('LocalStorage save error:', e);
-    }
+    persistTabsToStorage(tabs, activeTabId);
   }, [tabs, activeTabId]);
 
   // Tab operations
@@ -135,7 +128,8 @@ export function useMindMap() {
 
       setTabs(prev => [...prev, newTab]);
       setActiveTabId(newId);
-      setEditingNodeId(null);
+      pendingNewNodeRef.current = null;
+      setEditingNodeIdRaw(null);
     },
     []
   );
@@ -162,39 +156,87 @@ export function useMindMap() {
   const openFileInTab = useCallback(
     (filePath: string, content: string, fileName?: string) => {
       const normalized = filePath.toLowerCase();
-      const existing = tabs.find(t => t.filePath?.toLowerCase() === normalized);
+      const existing = tabsRef.current.find(t => t.filePath?.toLowerCase() === normalized);
       if (existing) {
+        if (!existing.isDirty) {
+          try {
+            const { map: diskMap, fallbackTitle } = parseFileContentToMap(
+              content,
+              fileName || filePath
+            );
+            setTabs(prev =>
+              prev.map(t =>
+                t.id === existing.id && !t.isDirty
+                  ? {
+                      ...t,
+                      title: diskMap.root.text || fallbackTitle || t.title,
+                      map: diskMap,
+                      past: [],
+                      future: [],
+                      selectedNodeId: diskMap.root.id,
+                      isDirty: false,
+                      savedPastLength: 0,
+                    }
+                  : t
+              )
+            );
+          } catch (err) {
+            console.warn('Failed to refresh existing file tab:', err);
+          }
+        }
         setActiveTabId(existing.id);
-        setEditingNodeId(null);
+        pendingNewNodeRef.current = null;
+        setEditingNodeIdRaw(null);
         return;
       }
 
-      const lowerName = (fileName || filePath).toLowerCase();
-      if (lowerName.endsWith('.md') || lowerName.endsWith('.txt')) {
-        const rootTitle = (fileName || 'Markdown').replace(/\.(md|txt)$/i, '');
-        const rootChildren = parseMarkdownToSubtree(content);
-        const newMap: FreeMindMap = {
-          version: '1.0.1',
-          root: {
-            id: generateNodeId(),
-            text: rootTitle,
-            style: 'bubble',
-            font: { size: 16, bold: true },
-            icons: [],
-            attributes: [],
-            arrowLinks: [],
-            hooks: [],
-            children: rootChildren,
-          },
-        };
-        createNewTab(newMap, rootTitle, filePath);
-        return;
-      }
-
-      const parsed = parseFreeMindXml(content);
-      createNewTab(parsed, parsed.root.text || fileName, filePath);
+      const { map: newMap, fallbackTitle } = parseFileContentToMap(content, fileName || filePath);
+      createNewTab(newMap, fallbackTitle, filePath);
     },
-    [tabs, createNewTab]
+    [createNewTab]
+  );
+
+  const reconcileTabWithDisk = useCallback(
+    (tabId: string, content: string, fileName?: string, forceReload: boolean = false) => {
+      try {
+        const { map: diskMap, fallbackTitle } = parseFileContentToMap(content, fileName);
+        const isMarkdown = /\.(md|txt)$/i.test(fileName || '');
+        const diskXml = isMarkdown ? null : serializeFreeMindXml(diskMap);
+
+        setTabs(prev =>
+          prev.map(t => {
+            if (t.id !== tabId) return t;
+            if (forceReload || !t.isDirty) {
+              return {
+                ...t,
+                title: diskMap.root.text || fallbackTitle || t.title,
+                map: diskMap,
+                past: [],
+                future: [],
+                selectedNodeId:
+                  t.selectedNodeId && findNode(diskMap.root, t.selectedNodeId)
+                    ? t.selectedNodeId
+                    : diskMap.root.id,
+                isDirty: false,
+                savedPastLength: 0,
+              };
+            }
+
+            if (diskXml !== null && serializeFreeMindXml(t.map) === diskXml) {
+              return {
+                ...t,
+                isDirty: false,
+                savedPastLength: t.past.length,
+              };
+            }
+            return t;
+          })
+        );
+      } catch (err) {
+        console.warn('Failed to reconcile tab with disk:', err);
+      }
+    },
+    []
   );
 
   const closeTab = useCallback((tabId: string) => {
@@ -252,6 +294,8 @@ export function useMindMap() {
   );
 
   const undo = useCallback(() => {
+    pendingNewNodeRef.current = null;
+    setEditingNodeIdRaw(null);
     setTabs(prev =>
       prev.map(t => {
         if (t.id !== activeTabId || t.past.length === 0) return t;
@@ -270,6 +314,8 @@ export function useMindMap() {
   }, [activeTabId]);
 
   const redo = useCallback(() => {
+    pendingNewNodeRef.current = null;
+    setEditingNodeIdRaw(null);
     setTabs(prev =>
       prev.map(t => {
         if (t.id !== activeTabId || t.future.length === 0) return t;
@@ -303,6 +349,19 @@ export function useMindMap() {
   const addChildNode = useCallback(
     (parentId: string) => {
       const newId = generateNodeId();
+      const currentTab = tabsRef.current.find(t => t.id === activeTabId) || tabsRef.current[0];
+      if (currentTab && findNode(currentTab.map.root, parentId)) {
+        pendingNewNodeRef.current = {
+          tabId: activeTabId,
+          nodeId: newId,
+          previousSelectedNodeId: parentId,
+          previousFuture: currentTab.future,
+          previousSavedPastLength: currentTab.savedPastLength,
+        };
+      } else {
+        pendingNewNodeRef.current = null;
+      }
+
       updateTree(root => {
         const parent = findNode(root, parentId);
         if (!parent) return false;
@@ -334,9 +393,9 @@ export function useMindMap() {
       });
 
       setSelectedNodeId(newId);
-      setEditingNodeId(newId);
+      setEditingNodeIdRaw(newId);
     },
-    [updateTree, setSelectedNodeId]
+    [activeTabId, updateTree, setSelectedNodeId]
   );
 
   const addSiblingNode = useCallback(
@@ -347,6 +406,19 @@ export function useMindMap() {
       }
 
       const newId = generateNodeId();
+      const currentTab = tabsRef.current.find(t => t.id === activeTabId) || tabsRef.current[0];
+      if (currentTab && findParentNode(currentTab.map.root, targetNodeId)) {
+        pendingNewNodeRef.current = {
+          tabId: activeTabId,
+          nodeId: newId,
+          previousSelectedNodeId: targetNodeId,
+          previousFuture: currentTab.future,
+          previousSavedPastLength: currentTab.savedPastLength,
+        };
+      } else {
+        pendingNewNodeRef.current = null;
+      }
+
       updateTree(root => {
         const parent = findParentNode(root, targetNodeId);
         if (!parent) return false;
@@ -374,14 +446,16 @@ export function useMindMap() {
       });
 
       setSelectedNodeId(newId);
-      setEditingNodeId(newId);
+      setEditingNodeIdRaw(newId);
     },
-    [map.root.id, addChildNode, updateTree, setSelectedNodeId]
+    [activeTabId, map.root.id, addChildNode, updateTree, setSelectedNodeId]
   );
 
   const deleteNode = useCallback(
     (nodeId: string) => {
       if (nodeId === map.root.id) return;
+      pendingNewNodeRef.current = null;
+      setEditingNodeIdRaw(null);
       updateTree(root => {
         const parent = findParentNode(root, nodeId);
         if (!parent) return false;
@@ -395,16 +469,37 @@ export function useMindMap() {
 
   const updateNodeText = useCallback(
     (nodeId: string, text: string) => {
+      const pending = pendingNewNodeRef.current;
+      if (pending && pending.tabId === activeTabId && pending.nodeId === nodeId) {
+        pendingNewNodeRef.current = null;
+        setTabs(prev =>
+          prev.map(t => (t.id === activeTabId ? commitPendingNewNodeTextOnTab(t, nodeId, text) : t))
+        );
+        return;
+      }
+
       updateTree(root => {
         const target = findNode(root, nodeId);
-        if (!target) return false;
+        if (!target || target.text === text) return false;
         target.text = text;
         target.modified = Date.now();
         return true;
       });
     },
-    [updateTree]
+    [activeTabId, updateTree]
   );
+
+  const cancelEditing = useCallback(() => {
+    const pending = pendingNewNodeRef.current;
+    pendingNewNodeRef.current = null;
+    setEditingNodeIdRaw(null);
+
+    if (pending && pending.tabId === activeTabId && pending.nodeId === editingNodeId) {
+      setTabs(prev =>
+        prev.map(t => (t.id === activeTabId ? cancelPendingNewNodeOnTab(t, pending) : t))
+      );
+    }
+  }, [activeTabId, editingNodeId]);
 
   const toggleFold = useCallback(
     (nodeId: string) => {
@@ -706,8 +801,10 @@ export function useMindMap() {
       try {
         const parsed = parseFreeMindXml(xmlString);
         if (asNewTab) {
-          createNewTab(parsed, parsed.root.text, undefined, true);
+          createNewTab(parsed, parsed.root.text, undefined, false);
         } else {
+          pendingNewNodeRef.current = null;
+          setEditingNodeIdRaw(null);
           pushHistory(parsed);
           setSelectedNodeId(parsed.root.id);
         }
@@ -720,6 +817,8 @@ export function useMindMap() {
   );
 
   const resetToDefault = useCallback(() => {
+    pendingNewNodeRef.current = null;
+    setEditingNodeIdRaw(null);
     pushHistory(initialFreeMindMap);
     setSelectedNodeId(initialFreeMindMap.root.id);
   }, [pushHistory, setSelectedNodeId]);
@@ -817,8 +916,10 @@ export function useMindMap() {
       };
 
       if (asNewTab) {
-        createNewTab(newMap, rootTitle, undefined, true);
+        createNewTab(newMap, rootTitle, undefined, false);
       } else {
+        pendingNewNodeRef.current = null;
+        setEditingNodeIdRaw(null);
         pushHistory(newMap);
         setSelectedNodeId(newMap.root.id);
       }
@@ -896,21 +997,30 @@ export function useMindMap() {
     revealAndSelectNode(searchResults[prevIdx]);
   }, [searchIndex, searchResults, revealAndSelectNode]);
 
+  const selectTab = useCallback((id: string) => {
+    pendingNewNodeRef.current = null;
+    setEditingNodeIdRaw(null);
+    setActiveTabId(id);
+  }, []);
+
   return {
     tabs,
     activeTabId,
     activeFilePath: activeTab.filePath,
-    setActiveTabId,
+    initialReloadTabIds: initialLoad.reloadFromDiskIds,
+    setActiveTabId: selectTab,
     createNewTab,
     setTabFilePath,
     markTabSaved,
     openFileInTab,
+    reconcileTabWithDisk,
     closeTab,
     map,
     selectedNodeId,
     setSelectedNodeId,
     editingNodeId,
     setEditingNodeId,
+    cancelEditing,
     addChildNode,
     addSiblingNode,
     deleteNode,

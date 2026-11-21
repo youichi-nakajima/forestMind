@@ -13,22 +13,26 @@ import { FreeMindNode, FreeMindMap } from './types/freemind';
 import { resumeAudioContext } from './utils/audio';
 import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
+import { persistTabsToStorage, prepareTabsForAppClose } from './utils/tabStorage';
 
 export const App: React.FC = () => {
   const {
     tabs,
     activeTabId,
     activeFilePath,
+    initialReloadTabIds,
     setActiveTabId,
     createNewTab,
     markTabSaved,
     openFileInTab,
+    reconcileTabWithDisk,
     closeTab,
     map,
     selectedNodeId,
     setSelectedNodeId,
     editingNodeId,
     setEditingNodeId,
+    cancelEditing,
     addChildNode,
     addSiblingNode,
     deleteNode,
@@ -345,10 +349,38 @@ export const App: React.FC = () => {
     }
   };
 
-  // Electron desktop integration: open initial/second-instance file, Ctrl+S save, file link navigation
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
+  const hasReconciledInitialTabsRef = useRef(false);
+
+  // Electron desktop integration: reconcile disk tabs, open initial/second-instance file, Ctrl+S save, file link navigation
   useEffect(() => {
     const api = window.electronAPI;
     if (!api) return;
+
+    if (!hasReconciledInitialTabsRef.current) {
+      hasReconciledInitialTabsRef.current = true;
+      const reloadSet = new Set(initialReloadTabIds);
+      const fileTabs = tabsRef.current.filter(t => Boolean(t.filePath));
+      if (fileTabs.length > 0) {
+        Promise.all(
+          fileTabs.map(async tab => {
+            if (!tab.filePath) return;
+            const res = await api.readFileByPath(tab.filePath);
+            if (res.ok && res.content !== undefined) {
+              reconcileTabWithDisk(
+                tab.id,
+                res.content,
+                res.fileName || tab.filePath,
+                reloadSet.has(tab.id)
+              );
+            }
+          })
+        ).catch(() => {});
+      }
+    }
 
     api.getInitialFile().then(payload => {
       if (payload) {
@@ -359,12 +391,12 @@ export const App: React.FC = () => {
     return api.onOpenFile(payload => {
       openFileInTab(payload.filePath, payload.content, payload.fileName);
     });
-  }, [openFileInTab]);
+  }, [openFileInTab, initialReloadTabIds, reconcileTabWithDisk]);
 
   const saveTabById = useCallback(
-    async (tabId: string): Promise<boolean> => {
+    async (tabId: string): Promise<{ saved: boolean; filePath?: string }> => {
       const targetTab = tabs.find(t => t.id === tabId);
-      if (!targetTab) return false;
+      if (!targetTab) return { saved: false };
 
       const api = window.electronAPI;
       const xml = exportTabXml(tabId);
@@ -381,7 +413,7 @@ export const App: React.FC = () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         markTabSaved(tabId);
-        return true;
+        return { saved: true };
       }
 
       if (targetTab.filePath) {
@@ -389,19 +421,19 @@ export const App: React.FC = () => {
         if (res.ok) {
           markTabSaved(tabId, targetTab.filePath);
           showToast(`上書き保存しました: ${targetTab.filePath.split(/[\\/]/).pop()}`);
-          return true;
+          return { saved: true, filePath: targetTab.filePath };
         }
         showToast(`保存に失敗しました: ${res.error || ''}`);
-        return false;
+        return { saved: false };
       }
 
       const res = await api.saveMmFileDialog(fallbackTitle, xml);
       if (!res.canceled && res.filePath) {
         markTabSaved(tabId, res.filePath);
         showToast(`保存しました: ${res.fileName || res.filePath}`);
-        return true;
+        return { saved: true, filePath: res.filePath };
       }
-      return false;
+      return { saved: false };
     },
     [tabs, exportTabXml, markTabSaved, showToast]
   );
@@ -424,8 +456,8 @@ export const App: React.FC = () => {
           const choice = await api.confirmUnsaved(tabTitle);
           if (choice === 'cancel') return;
           if (choice === 'save') {
-            const saved = await saveTabById(tabId);
-            if (!saved) return;
+            const res = await saveTabById(tabId);
+            if (!res.saved) return;
           }
         } else {
           const ok = window.confirm(`「${tabTitle}」には未保存の変更があります。保存せずに閉じますか？`);
@@ -437,8 +469,6 @@ export const App: React.FC = () => {
     [tabs, closeTab, saveTabById]
   );
 
-  const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
   const saveTabByIdRef = useRef(saveTabById);
   saveTabByIdRef.current = saveTabById;
   const isClosingPromptRef = useRef(false);
@@ -453,6 +483,9 @@ export const App: React.FC = () => {
       isClosingPromptRef.current = true;
       try {
         const dirtyTabs = tabsRef.current.filter(t => t.isDirty);
+        const savedOverrides = new Map<string, string | undefined>();
+        const discardedTabIds = new Set<string>();
+
         for (const tab of dirtyTabs) {
           const tabTitle = tab.map.root.text || tab.title || '無題マップ';
           const choice = await api.confirmUnsaved(tabTitle);
@@ -461,12 +494,28 @@ export const App: React.FC = () => {
           }
           if (choice === 'save') {
             setActiveTabId(tab.id);
-            const saved = await saveTabByIdRef.current(tab.id);
-            if (!saved) {
+            const res = await saveTabByIdRef.current(tab.id);
+            if (!res.saved) {
               return;
             }
+            savedOverrides.set(tab.id, res.filePath);
+          } else if (choice === 'discard') {
+            discardedTabIds.add(tab.id);
           }
         }
+
+        const prepared = prepareTabsForAppClose(
+          tabsRef.current,
+          activeTabIdRef.current,
+          savedOverrides,
+          discardedTabIds
+        );
+        persistTabsToStorage(
+          prepared.tabs,
+          prepared.activeTabId,
+          prepared.reloadFromDiskIds
+        );
+
         api.confirmAppClose();
       } finally {
         isClosingPromptRef.current = false;
@@ -627,6 +676,7 @@ export const App: React.FC = () => {
               }}
               editingNodeId={editingNodeId}
               setEditingNodeId={setEditingNodeId}
+              onCancelEditing={cancelEditing}
               onAddChild={addChildNode}
               onAddSibling={addSiblingNode}
               onDeleteNode={deleteNode}

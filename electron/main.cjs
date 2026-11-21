@@ -2,10 +2,12 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
+const { createSettingsStore, resolveSaveDefaultPath } = require('./settingsStore.cjs');
 
 let mainWindow = null;
 let initialFilePath = null;
 let isForceClosing = false;
+let settingsStore = null;
 
 function extractMmArg(argv) {
   for (const arg of argv) {
@@ -30,6 +32,7 @@ if (!gotLock) {
       if (fileArg) {
         try {
           const content = fs.readFileSync(fileArg, 'utf8');
+          settingsStore?.saveLastUsedDir(path.dirname(fileArg));
           mainWindow.webContents.send('app:openFile', {
             filePath: fileArg,
             fileName: path.basename(fileArg),
@@ -118,10 +121,13 @@ function resolveTargetFilePath(rawTarget, baseFilePath) {
 }
 
 app.whenReady().then(() => {
+  settingsStore = createSettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+
   ipcMain.handle('app:getInitialFile', () => {
     if (!initialFilePath || !fs.existsSync(initialFilePath)) return null;
     try {
       const content = fs.readFileSync(initialFilePath, 'utf8');
+      settingsStore?.saveLastUsedDir(path.dirname(initialFilePath));
       const result = {
         filePath: initialFilePath,
         fileName: path.basename(initialFilePath),
@@ -138,6 +144,7 @@ app.whenReady().then(() => {
   ipcMain.handle('dialog:openMmFile', async () => {
     const res = await dialog.showOpenDialog(mainWindow, {
       title: 'マインドマップを開く',
+      defaultPath: settingsStore?.getLastUsedDir(),
       properties: ['openFile'],
       filters: [
         { name: 'MindMap / Markdown', extensions: ['mm', 'md', 'txt'] },
@@ -149,6 +156,7 @@ app.whenReady().then(() => {
     if (res.canceled || res.filePaths.length === 0) return null;
     const filePath = res.filePaths[0];
     const content = fs.readFileSync(filePath, 'utf8');
+    settingsStore?.saveLastUsedDir(path.dirname(filePath));
     return {
       filePath,
       fileName: path.basename(filePath),
@@ -181,6 +189,7 @@ app.whenReady().then(() => {
   ipcMain.handle('file:save', (_event, filePath, content) => {
     try {
       fs.writeFileSync(filePath, content, 'utf8');
+      settingsStore?.saveLastUsedDir(path.dirname(filePath));
       return { ok: true, filePath };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -188,7 +197,11 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('dialog:saveMmFile', async (_event, defaultName, content, baseFilePath) => {
-    const defaultPath = baseFilePath || `${defaultName || 'mindmap'}.mm`;
+    const defaultPath = resolveSaveDefaultPath(
+      defaultName,
+      baseFilePath,
+      settingsStore?.getLastUsedDir()
+    );
     const res = await dialog.showSaveDialog(mainWindow, {
       title: '名前を付けて保存',
       defaultPath,
@@ -199,6 +212,7 @@ app.whenReady().then(() => {
     });
     if (res.canceled || !res.filePath) return { canceled: true };
     fs.writeFileSync(res.filePath, content, 'utf8');
+    settingsStore?.saveLastUsedDir(path.dirname(res.filePath));
     return {
       canceled: false,
       filePath: res.filePath,
@@ -210,7 +224,9 @@ app.whenReady().then(() => {
     const res = await dialog.showOpenDialog(mainWindow, {
       title: 'リンク先のマインドマップ (.mm) を選択',
       properties: ['openFile'],
-      defaultPath: baseFilePath ? path.dirname(baseFilePath) : undefined,
+      defaultPath:
+        (baseFilePath ? path.dirname(baseFilePath) : undefined) ||
+        settingsStore?.getLastUsedDir(),
       filters: [
         { name: 'FreeMind (.mm)', extensions: ['mm'] },
         { name: 'All Files', extensions: ['*'] },

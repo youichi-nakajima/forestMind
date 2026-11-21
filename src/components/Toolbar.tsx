@@ -181,7 +181,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             className="toolbar-btn"
             title="FreeMind (.mm) または Markdown (.md) ファイルを開いて森林に追加"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => (onOpenFileDialog ? onOpenFileDialog() : fileInputRef.current?.click())}
           >
             <FolderOpen size={16} />
             <span>ファイルを開く</span>

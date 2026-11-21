@@ -49,6 +49,8 @@ Edit details of the selected node in the right-side inspector:
 ### 🌳 Multi-Tab & Forest View
 
 - Edit multiple mind maps simultaneously in tabs
+  - **Drag-and-drop reordering**: rearrange open tabs with a visual drop indicator (tab order is persisted)
+  - **Pin-to-lock tabs**: click a tab's left icon to pin it on the left and hide the close button to prevent accidental closing (pinned state is persisted)
 - **Forest View** to overview all open maps:
   - Node count, max depth, and main topic preview for each map
   - Cross-tab keyword search with direct jump to matching nodes

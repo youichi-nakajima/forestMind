@@ -4,6 +4,7 @@ import { initialFreeMindMap } from '../../data/defaultMap';
 import { FreeMindMap } from '../../types/freemind';
 import {
   STORAGE_KEY_ACTIVE_TAB,
+  STORAGE_KEY_CORRUPT_BACKUP,
   STORAGE_KEY_TABS,
   loadTabsFromStorage,
   persistTabsToStorage,
@@ -183,6 +184,41 @@ describe('tabStorage', () => {
     expect(result.tabs.map(t => t.isPinned)).toEqual([true, true]);
     expect(result.tabs[0].isDirty).toBe(false);
     expect(result.tabs[1].isDirty).toBe(false);
+  });
+
+  it('restores readable tabs and backs up corrupt ones instead of resetting everything', () => {
+    const good = makeTab({ id: 'tab_good', title: 'Good' });
+    persistTabsToStorage([good], 'tab_good');
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY_TABS) || '[]');
+    raw.push({ id: 'tab_bad', title: 'Broken Map', xml: '<map><node TEXT="x"><p>a & b</node>' });
+    localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(raw));
+
+    const loaded = loadTabsFromStorage();
+    expect(loaded.tabs.map(t => t.id)).toEqual(['tab_good']);
+    expect(loaded.failedTabTitles).toEqual(['Broken Map']);
+
+    const backup = JSON.parse(localStorage.getItem(STORAGE_KEY_CORRUPT_BACKUP) || '[]');
+    expect(backup).toHaveLength(1);
+    expect(backup[0].entries[0].id).toBe('tab_bad');
+  });
+
+  it('backs up unparsable storage JSON and falls back to the default tab', () => {
+    localStorage.setItem(STORAGE_KEY_TABS, '{not json');
+    const loaded = loadTabsFromStorage();
+    expect(loaded.tabs[0].id).toBe('tab_default');
+    expect(loaded.failedTabTitles).toHaveLength(1);
+    const backup = JSON.parse(localStorage.getItem(STORAGE_KEY_CORRUPT_BACKUP) || '[]');
+    expect(backup[0].entries[0]).toBe('{not json');
+  });
+
+  it('round-trips notes containing XML special characters through storage', () => {
+    const map = cloneMap();
+    map.root.noteHtml = '<p>a < b & c</p>';
+    persistTabsToStorage([makeTab({ id: 'tab_note', map })], 'tab_note');
+    const loaded = loadTabsFromStorage();
+    expect(loaded.failedTabTitles).toEqual([]);
+    expect(loaded.tabs[0].id).toBe('tab_note');
+    expect(loaded.tabs[0].map.root.noteHtml).toContain('a &lt; b &amp; c');
   });
 });
 

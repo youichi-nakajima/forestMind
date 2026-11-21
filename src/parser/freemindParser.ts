@@ -13,11 +13,14 @@ import {
   FreeMindHook,
 } from '../types/freemind';
 
+let nodeIdCounter = 0;
+
 /**
- * Generate a unique FreeMind-style ID (e.g. ID_1234567890)
+ * Generate a unique FreeMind-style ID (e.g. ID_1234567890_1_12345)
  */
 export function generateNodeId(): string {
-  return `ID_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  nodeIdCounter = (nodeIdCounter + 1) % 1000000;
+  return `ID_${Date.now()}_${nodeIdCounter}_${Math.floor(Math.random() * 100000)}`;
 }
 
 /**

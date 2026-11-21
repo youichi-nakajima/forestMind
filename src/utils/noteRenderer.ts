@@ -41,6 +41,17 @@ const ALLOWED_TAGS = new Set([
   'div',
   'span',
   'hr',
+  'h5',
+  'h6',
+  'sub',
+  'sup',
+  'small',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
 ]);
 
 const STRIP_CONTENT_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'form', 'svg']);
@@ -206,5 +217,54 @@ export function renderNoteForPopover(noteHtml: string): string {
   }
 
   return renderSimpleMarkdownToHtml(plain);
+}
+
+const NODE_HTML_CACHE_LIMIT = 500;
+const nodeHtmlCache = new Map<string, string>();
+
+/**
+ * Sanitize FreeMind rich node content (richcontent TYPE="NODE") for inline rendering.
+ * Results are memoized because this runs for every visible node on each render.
+ */
+export function sanitizeNodeHtml(rawHtml: string): string {
+  const cached = nodeHtmlCache.get(rawHtml);
+  if (cached !== undefined) return cached;
+  const clean = sanitizeNoteHtml(rawHtml);
+  if (nodeHtmlCache.size >= NODE_HTML_CACHE_LIMIT) {
+    const oldestKey = nodeHtmlCache.keys().next().value;
+    if (oldestKey !== undefined) nodeHtmlCache.delete(oldestKey);
+  }
+  nodeHtmlCache.set(rawHtml, clean);
+  return clean;
+}
+
+/**
+ * Convert textarea plain text into note HTML. Every line becomes an escaped <p> element,
+ * so characters such as `<` and `&` can never break the saved XML.
+ */
+export function plainTextToNoteHtml(text: string): string | undefined {
+  if (!text) return undefined;
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(line => `<p>${escapeHtml(line)}</p>`)
+    .join('');
+}
+
+/**
+ * Convert note HTML back into plain text for editing / plain-text export.
+ * Entities are decoded and paragraph boundaries become newlines.
+ */
+export function noteHtmlToPlainText(noteHtml?: string): string {
+  if (!noteHtml) return '';
+  if (typeof DOMParser === 'undefined') {
+    return noteHtml.replace(/<\/p>\s*<p[^>]*>/gi, '\n').replace(/<[^>]+>/g, '');
+  }
+  const doc = new DOMParser().parseFromString(noteHtml, 'text/html');
+  const paragraphs = Array.from(doc.body.querySelectorAll('p'));
+  if (paragraphs.length > 0 && doc.body.children.length === paragraphs.length) {
+    return paragraphs.map(p => p.textContent || '').join('\n');
+  }
+  return doc.body.textContent || '';
 }
 

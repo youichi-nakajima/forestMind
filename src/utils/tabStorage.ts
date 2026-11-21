@@ -6,6 +6,7 @@ import { normalizeTabOrder } from './tabOrder';
 
 export const STORAGE_KEY_TABS = 'forestmind_saved_tabs_v2';
 export const STORAGE_KEY_ACTIVE_TAB = 'forestmind_active_tab_id_v2';
+export const STORAGE_KEY_CORRUPT_BACKUP = 'forestmind_corrupt_tabs_backup';
 
 export interface SerializedTab {
   id: string;
@@ -52,53 +53,104 @@ export function persistTabsToStorage(
   tabs: MapTab[],
   activeTabId: string,
   reloadFromDiskIds?: Set<string>
-): void {
+): boolean {
   try {
     const serializedTabs = serializeTabsForStorage(tabs, reloadFromDiskIds);
     localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(serializedTabs));
     localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, activeTabId);
+    return true;
   } catch (e) {
     console.warn('LocalStorage save error:', e);
+    return false;
   }
 }
 
-export function loadTabsFromStorage(): { tabs: MapTab[]; reloadFromDiskIds: string[] } {
-  const reloadFromDiskIds: string[] = [];
+/**
+ * Keep unreadable tab data in a separate key so it is not lost when the
+ * auto-save overwrites the main storage key.
+ */
+function backupCorruptTabData(entries: unknown[]): void {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY_TABS);
-    if (saved) {
-      const parsed = JSON.parse(saved) as SerializedTab[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const tabs: MapTab[] = parsed.map(t => {
-          const mapObj = parseFreeMindXml(t.xml);
-          const needsReload = Boolean(t.reloadFromDisk && t.filePath);
+    const existingRaw = localStorage.getItem(STORAGE_KEY_CORRUPT_BACKUP);
+    const existing = existingRaw ? (JSON.parse(existingRaw) as unknown) : [];
+    const list = Array.isArray(existing) ? existing : [];
+    list.push({ savedAt: new Date().toISOString(), entries });
+    localStorage.setItem(STORAGE_KEY_CORRUPT_BACKUP, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to back up corrupt tab data:', e);
+  }
+}
+
+export interface LoadTabsResult {
+  tabs: MapTab[];
+  reloadFromDiskIds: string[];
+  /** Titles of saved tabs that could not be restored (backed up to STORAGE_KEY_CORRUPT_BACKUP). */
+  failedTabTitles: string[];
+}
+
+export function loadTabsFromStorage(): LoadTabsResult {
+  const reloadFromDiskIds: string[] = [];
+  const failedTabTitles: string[] = [];
+  const failedEntries: unknown[] = [];
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(STORAGE_KEY_TABS);
+  } catch (e) {
+    console.warn('Failed to access localStorage:', e);
+  }
+
+  if (saved) {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(saved);
+    } catch (e) {
+      console.warn('Failed to parse saved tabs:', e);
+      backupCorruptTabData([saved]);
+      failedTabTitles.push('(保存データ全体)');
+    }
+
+    if (Array.isArray(parsed)) {
+      const tabs: MapTab[] = [];
+      for (const entry of parsed as SerializedTab[]) {
+        try {
+          const mapObj = parseFreeMindXml(entry.xml);
+          const needsReload = Boolean(entry.reloadFromDisk && entry.filePath);
           if (needsReload) {
-            reloadFromDiskIds.push(t.id);
+            reloadFromDiskIds.push(entry.id);
           }
-          const dirty = needsReload ? false : Boolean(t.isDirty);
-          return {
-            id: t.id,
-            title: t.title || mapObj.root.text || '無題マップ',
-            filePath: t.filePath,
+          const dirty = needsReload ? false : Boolean(entry.isDirty);
+          tabs.push({
+            id: entry.id,
+            title: entry.title || mapObj.root.text || '無題マップ',
+            filePath: entry.filePath,
             map: mapObj,
             past: [],
             future: [],
             selectedNodeId: mapObj.root.id,
             isDirty: dirty,
-            isPinned: Boolean(t.isPinned),
+            isPinned: Boolean(entry.isPinned),
             savedPastLength: dirty ? undefined : 0,
-          };
-        });
-        return { tabs: normalizeTabOrder(tabs), reloadFromDiskIds };
+          });
+        } catch (e) {
+          console.warn('Failed to restore a saved tab:', e);
+          failedEntries.push(entry);
+          failedTabTitles.push(entry?.title || entry?.filePath || entry?.id || '無題マップ');
+        }
+      }
+
+      if (failedEntries.length > 0) {
+        backupCorruptTabData(failedEntries);
+      }
+      if (tabs.length > 0) {
+        return { tabs: normalizeTabOrder(tabs), reloadFromDiskIds, failedTabTitles };
       }
     }
-  } catch (e) {
-    console.warn('Failed to load tabs from localStorage:', e);
   }
 
   return {
     tabs: [createDefaultTab()],
     reloadFromDiskIds: [],
+    failedTabTitles,
   };
 }
 

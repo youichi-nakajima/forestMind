@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FreeMindNode, NodeStyle, FreeMindMap } from '../types/freemind';
 import { CLOUD_PALETTE } from '../utils/layout';
+import { noteHtmlToPlainText, plainTextToNoteHtml } from '../utils/noteRenderer';
 import {
   Palette,
   Type,
@@ -255,10 +256,10 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
             className="form-textarea"
             rows={3}
             placeholder="ノードの詳細説明やメモ..."
-            value={node.noteHtml ? node.noteHtml.replace(/<[^>]+>/g, '') : ''}
+            value={noteHtmlToPlainText(node.noteHtml)}
             onChange={e =>
               onUpdate({
-                noteHtml: e.target.value ? `<p>${e.target.value}</p>` : undefined,
+                noteHtml: plainTextToNoteHtml(e.target.value),
               })
             }
           />

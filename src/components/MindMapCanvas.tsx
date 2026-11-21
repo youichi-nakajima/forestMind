@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { FreeMindMap } from '../types/freemind';
 import { computeLayout, LayoutNode, EdgePath } from '../utils/layout';
 import { computeMapBounds } from '../utils/exportImage';
-import { renderNoteForPopover } from '../utils/noteRenderer';
+import { renderNoteForPopover, sanitizeNodeHtml } from '../utils/noteRenderer';
 import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2 } from 'lucide-react';
 
 interface MindMapCanvasProps {
@@ -717,7 +717,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       {node.htmlContent ? (
                         <span
                           className="node-html-content"
-                          dangerouslySetInnerHTML={{ __html: node.htmlContent }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeNodeHtml(node.htmlContent) }}
                         />
                       ) : (
                         node.text || ' '

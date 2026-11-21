@@ -15,6 +15,9 @@ import {
   commitPendingNewNodeTextOnTab,
 } from '../utils/pendingNodeEdit';
 import { reorderTabsInList, toggleTabPinnedInList } from '../utils/tabOrder';
+import { noteHtmlToPlainText } from '../utils/noteRenderer';
+
+let tabIdCounter = 0;
 
 export interface MapTab {
   id: string;
@@ -74,12 +77,15 @@ export function useMindMap() {
 
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
   const map = activeTab.map;
   const selectedNodeId = activeTab.selectedNodeId;
   const [editingNodeId, setEditingNodeIdRaw] = useState<string | null>(null);
   const pendingNewNodeRef = useRef<PendingNewNodeEdit | null>(null);
+  const lastPropEditRef = useRef<{ tabId: string; nodeId: string; timestamp: number } | null>(null);
 
   const setEditingNodeId = useCallback((nextId: string | null) => {
     if (pendingNewNodeRef.current && pendingNewNodeRef.current.nodeId !== nextId) {
@@ -92,15 +98,96 @@ export function useMindMap() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
 
-  // Auto-save to localStorage
+  // Auto-save to localStorage (debounced, skipping selection-only updates)
+  const [storageSaveFailed, setStorageSaveFailed] = useState(false);
+  const prevPersistedTabsRef = useRef<Array<{
+    id: string;
+    title: string;
+    filePath?: string;
+    isDirty?: boolean;
+    isPinned?: boolean;
+    map: FreeMindMap;
+  }> | null>(null);
+  const prevPersistedActiveTabIdRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const hasPendingSaveRef = useRef(false);
+
+  const flushPendingStorageSave = useCallback(() => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (hasPendingSaveRef.current) {
+      hasPendingSaveRef.current = false;
+      const ok = persistTabsToStorage(tabsRef.current, activeTabIdRef.current);
+      setStorageSaveFailed(!ok);
+    }
+  }, []);
+
   useEffect(() => {
-    persistTabsToStorage(tabs, activeTabId);
+    const prevTabs = prevPersistedTabsRef.current;
+    const isSamePersisted =
+      prevTabs !== null &&
+      prevPersistedActiveTabIdRef.current === activeTabId &&
+      prevTabs.length === tabs.length &&
+      tabs.every(
+        (t, idx) =>
+          t.id === prevTabs[idx].id &&
+          t.title === prevTabs[idx].title &&
+          t.filePath === prevTabs[idx].filePath &&
+          t.isDirty === prevTabs[idx].isDirty &&
+          t.isPinned === prevTabs[idx].isPinned &&
+          t.map === prevTabs[idx].map
+      );
+
+    if (isSamePersisted) {
+      return;
+    }
+
+    prevPersistedTabsRef.current = tabs.map(t => ({
+      id: t.id,
+      title: t.title,
+      filePath: t.filePath,
+      isDirty: t.isDirty,
+      isPinned: t.isPinned,
+      map: t.map,
+    }));
+    prevPersistedActiveTabIdRef.current = activeTabId;
+    hasPendingSaveRef.current = true;
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      hasPendingSaveRef.current = false;
+      const ok = persistTabsToStorage(tabsRef.current, activeTabIdRef.current);
+      setStorageSaveFailed(!ok);
+    }, 150);
   }, [tabs, activeTabId]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPendingStorageSave();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (hasPendingSaveRef.current) {
+        hasPendingSaveRef.current = false;
+        persistTabsToStorage(tabsRef.current, activeTabIdRef.current);
+      }
+    };
+  }, [flushPendingStorageSave]);
 
   // Tab operations
   const createNewTab = useCallback(
     (customMap?: FreeMindMap, title?: string, filePath?: string, initialDirty: boolean = false) => {
-      const newId = `tab_${Date.now()}`;
+      const newId = `tab_${Date.now()}_${++tabIdCounter}`;
       const newMap: FreeMindMap = customMap || {
         version: '1.0.1',
         root: {
@@ -128,6 +215,7 @@ export function useMindMap() {
         savedPastLength: initialDirty ? undefined : 0,
       };
 
+      lastPropEditRef.current = null;
       setTabs(prev => [...prev, newTab]);
       setActiveTabId(newId);
       pendingNewNodeRef.current = null;
@@ -141,6 +229,7 @@ export function useMindMap() {
   }, []);
 
   const markTabSaved = useCallback((tabId: string, filePath?: string) => {
+    lastPropEditRef.current = null;
     setTabs(prev =>
       prev.map(t =>
         t.id === tabId
@@ -157,6 +246,7 @@ export function useMindMap() {
 
   const openFileInTab = useCallback(
     (filePath: string, content: string, fileName?: string) => {
+      lastPropEditRef.current = null;
       const normalized = filePath.toLowerCase();
       const existing = tabsRef.current.find(t => t.filePath?.toLowerCase() === normalized);
       if (existing) {
@@ -271,6 +361,7 @@ export function useMindMap() {
 
   const setSelectedNodeId = useCallback(
     (nodeId: string | null) => {
+      lastPropEditRef.current = null;
       setTabs(prev =>
         prev.map(t => (t.id === activeTabId ? { ...t, selectedNodeId: nodeId } : t))
       );
@@ -281,6 +372,7 @@ export function useMindMap() {
   // Undo / Redo
   const pushHistory = useCallback(
     (newMap: FreeMindMap) => {
+      lastPropEditRef.current = null;
       setTabs(prev =>
         prev.map(t => {
           if (t.id !== activeTabId) return t;
@@ -312,6 +404,7 @@ export function useMindMap() {
 
   const undo = useCallback(() => {
     pendingNewNodeRef.current = null;
+    lastPropEditRef.current = null;
     setEditingNodeIdRaw(null);
     setTabs(prev =>
       prev.map(t => {
@@ -332,6 +425,7 @@ export function useMindMap() {
 
   const redo = useCallback(() => {
     pendingNewNodeRef.current = null;
+    lastPropEditRef.current = null;
     setEditingNodeIdRaw(null);
     setTabs(prev =>
       prev.map(t => {
@@ -509,6 +603,7 @@ export function useMindMap() {
   const cancelEditing = useCallback(() => {
     const pending = pendingNewNodeRef.current;
     pendingNewNodeRef.current = null;
+    lastPropEditRef.current = null;
     setEditingNodeIdRaw(null);
 
     if (pending && pending.tabId === activeTabId && pending.nodeId === editingNodeId) {
@@ -556,15 +651,55 @@ export function useMindMap() {
 
   const updateNodeProperties = useCallback(
     (nodeId: string, patch: Partial<FreeMindNode>) => {
+      const now = Date.now();
+      const last = lastPropEditRef.current;
+      const shouldCoalesce =
+        last !== null &&
+        last.tabId === activeTabId &&
+        last.nodeId === nodeId &&
+        now - last.timestamp < 700;
+
+      const currentTab = tabsRef.current.find(t => t.id === activeTabId);
+      if (
+        shouldCoalesce &&
+        currentTab &&
+        currentTab.past.length > 0 &&
+        findNode(currentTab.map.root, nodeId)
+      ) {
+        lastPropEditRef.current = { tabId: activeTabId, nodeId, timestamp: now };
+        setTabs(prev =>
+          prev.map(t => {
+            if (t.id !== activeTabId || t.past.length === 0) return t;
+            const clonedMap = JSON.parse(JSON.stringify(t.map)) as FreeMindMap;
+            const target = findNode(clonedMap.root, nodeId);
+            if (!target) return t;
+            Object.assign(target, patch);
+            target.modified = now;
+            return {
+              ...t,
+              title: clonedMap.root.text || t.title,
+              map: clonedMap,
+              isDirty: t.savedPastLength === undefined || t.past.length !== t.savedPastLength,
+            };
+          })
+        );
+        return;
+      }
+
+      let changedInTree = false;
       updateTree(root => {
         const target = findNode(root, nodeId);
         if (!target) return false;
         Object.assign(target, patch);
-        target.modified = Date.now();
+        target.modified = now;
+        changedInTree = true;
         return true;
       });
+      if (changedInTree) {
+        lastPropEditRef.current = { tabId: activeTabId, nodeId, timestamp: now };
+      }
     },
-    [updateTree]
+    [activeTabId, updateTree]
   );
 
   const moveNode = useCallback(
@@ -957,7 +1092,7 @@ export function useMindMap() {
       }
 
       if (node.noteHtml) {
-        const plainNote = node.noteHtml.replace(/<[^>]+>/g, '').trim();
+        const plainNote = noteHtmlToPlainText(node.noteHtml).replace(/\s*\n\s*/g, ' ').trim();
         if (plainNote) {
           lines.push(`${indent}  > ${plainNote}`);
         }
@@ -991,13 +1126,79 @@ export function useMindMap() {
   }, [map.root, searchQuery])();
 
   const revealAndSelectNode = useCallback(
-    (targetNodeId: string) => {
-      updateTree(root => {
-        return unfoldAncestors(root, targetNodeId);
-      });
-      setSelectedNodeId(targetNodeId);
+    (targetNodeId: string, targetTabId?: string) => {
+      const resolvedTabId = targetTabId ?? activeTabId;
+      pendingNewNodeRef.current = null;
+      lastPropEditRef.current = null;
+      setEditingNodeIdRaw(null);
+      if (targetTabId && targetTabId !== activeTabId) {
+        setActiveTabId(targetTabId);
+      }
+      setTabs(prev =>
+        prev.map(t => {
+          if (t.id !== resolvedTabId) return t;
+          const clonedMap = JSON.parse(JSON.stringify(t.map)) as FreeMindMap;
+          const changed = unfoldAncestors(clonedMap.root, targetNodeId);
+          if (!changed) {
+            return { ...t, selectedNodeId: targetNodeId };
+          }
+          const dropped = t.past.length >= 31 ? 1 : 0;
+          const nextPast = [...t.past.slice(-30), t.map];
+          let nextSavedPastLen = t.savedPastLength;
+          if (nextSavedPastLen !== undefined) {
+            if (t.past.length < nextSavedPastLen) {
+              nextSavedPastLen = undefined;
+            } else if (dropped > 0) {
+              nextSavedPastLen = nextSavedPastLen - 1;
+              if (nextSavedPastLen < 0) nextSavedPastLen = undefined;
+            }
+          }
+          return {
+            ...t,
+            map: clonedMap,
+            past: nextPast,
+            future: [],
+            selectedNodeId: targetNodeId,
+            isDirty: nextSavedPastLen === undefined || nextPast.length !== nextSavedPastLen,
+            savedPastLength: nextSavedPastLen,
+          };
+        })
+      );
     },
-    [updateTree, setSelectedNodeId]
+    [activeTabId]
+  );
+
+  const openMapAndSelectNode = useCallback(
+    (targetMap: FreeMindMap, title: string, nodeId: string) => {
+      pendingNewNodeRef.current = null;
+      lastPropEditRef.current = null;
+      setEditingNodeIdRaw(null);
+      const existingTab = tabsRef.current.find(
+        t =>
+          t.map.root.id === targetMap.root.id &&
+          (t.title === title || t.map.root.text === targetMap.root.text)
+      );
+      if (existingTab) {
+        revealAndSelectNode(nodeId, existingTab.id);
+        return;
+      }
+      const preparedMap = JSON.parse(JSON.stringify(targetMap)) as FreeMindMap;
+      unfoldAncestors(preparedMap.root, nodeId);
+      const newId = `tab_${Date.now()}_${++tabIdCounter}`;
+      const newTab: MapTab = {
+        id: newId,
+        title: preparedMap.root.text || title || '新規マップ',
+        map: preparedMap,
+        past: [],
+        future: [],
+        selectedNodeId: nodeId,
+        isDirty: false,
+        savedPastLength: 0,
+      };
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabId(newId);
+    },
+    [revealAndSelectNode]
   );
 
   const handleNextSearch = useCallback(() => {
@@ -1016,6 +1217,7 @@ export function useMindMap() {
 
   const selectTab = useCallback((id: string) => {
     pendingNewNodeRef.current = null;
+    lastPropEditRef.current = null;
     setEditingNodeIdRaw(null);
     setActiveTabId(id);
   }, []);
@@ -1025,6 +1227,8 @@ export function useMindMap() {
     activeTabId,
     activeFilePath: activeTab.filePath,
     initialReloadTabIds: initialLoad.reloadFromDiskIds,
+    storageLoadFailedTitles: initialLoad.failedTabTitles,
+    storageSaveFailed,
     setActiveTabId: selectTab,
     createNewTab,
     setTabFilePath,
@@ -1071,6 +1275,7 @@ export function useMindMap() {
     handleNextSearch,
     handlePrevSearch,
     revealAndSelectNode,
+    openMapAndSelectNode,
   };
 }
 

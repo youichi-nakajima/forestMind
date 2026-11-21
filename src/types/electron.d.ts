@@ -17,6 +17,15 @@ export interface ElectronSaveDialogResult {
   canceled: boolean;
   filePath?: string;
   fileName?: string;
+  error?: string;
+}
+
+export interface ElectronSaveResult {
+  ok: boolean;
+  filePath?: string;
+  error?: string;
+  /** 'NOT_ALLOWED' when the path was not opened/chosen by the user in this session. */
+  code?: 'NOT_ALLOWED' | 'WRITE_FAILED';
 }
 
 export interface ElectronPickLinkResult {
@@ -30,7 +39,7 @@ export interface ElectronAPI {
   onOpenFile: (callback: (payload: ElectronFilePayload) => void) => () => void;
   openMmFile: () => Promise<ElectronFilePayload | null>;
   readFileByPath: (targetPath: string, baseFilePath?: string) => Promise<ElectronReadPathResult>;
-  saveFile: (filePath: string, content: string) => Promise<{ ok: boolean; filePath?: string; error?: string }>;
+  saveFile: (filePath: string, content: string) => Promise<ElectronSaveResult>;
   saveMmFileDialog: (
     defaultName: string,
     content: string,

@@ -1,6 +1,22 @@
 import { FreeMindMap, FreeMindNode } from '../types/freemind';
 
 /**
+ * Whether a code point is allowed in an XML 1.0 document (even as a character reference).
+ * Disallowed characters (most C0 controls, lone surrogates, U+FFFE/U+FFFF) are dropped,
+ * otherwise the saved file could not be parsed again.
+ */
+function isXmlChar(code: number): boolean {
+  return (
+    code === 0x9 ||
+    code === 0xa ||
+    code === 0xd ||
+    (code >= 0x20 && code <= 0xd7ff) ||
+    (code >= 0xe000 && code <= 0xfffd) ||
+    (code >= 0x10000 && code <= 0x10ffff)
+  );
+}
+
+/**
  * Escape string for FreeMind 1.0.1 XML attributes.
  * FreeMind's XMLElement.writeEncoded converts any character outside ASCII 32..126
  * (including Japanese / CJK characters and newlines) into hex numeric character references (&#xXXXX;).
@@ -26,7 +42,9 @@ export function escapeXmlAttr(str: string): string {
         break;
       default: {
         const code = ch.codePointAt(0)!;
-        if (code < 32 || code > 126) {
+        if (!isXmlChar(code)) {
+          // Drop characters that are illegal in XML 1.0
+        } else if (code < 32 || code > 126) {
           result += `&#x${code.toString(16)};`;
         } else {
           result += ch;
@@ -44,6 +62,9 @@ function encodeNonAsciiHtml(html: string): string {
   let result = '';
   for (const ch of html) {
     const code = ch.codePointAt(0)!;
+    if (!isXmlChar(code)) {
+      continue;
+    }
     if (code > 126) {
       result += `&#x${code.toString(16)};`;
     } else {
@@ -52,6 +73,75 @@ function encodeNonAsciiHtml(html: string): string {
   }
   return result;
 }
+
+const XHTML_NS_ATTR = / xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g;
+const FRAGMENT_CACHE_LIMIT = 500;
+const wellFormedCache = new Map<string, string>();
+const XML_PREDEFINED_ENTITIES = new Set(['amp', 'lt', 'gt', 'quot', 'apos']);
+
+function isWellFormedFragment(fragment: string): boolean {
+  const doc = new DOMParser().parseFromString(`<x>${fragment}</x>`, 'text/xml');
+  return doc.getElementsByTagName('parsererror').length === 0;
+}
+
+/** Replace HTML-only named entities (e.g. &nbsp;) with their characters; XML only knows 5 entities. */
+function replaceHtmlOnlyEntities(fragment: string): string {
+  return fragment.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (match, name: string) => {
+    if (XML_PREDEFINED_ENTITIES.has(name)) return match;
+    const decoded = new DOMParser().parseFromString(match, 'text/html').body.textContent || '';
+    if (!decoded || decoded === match) return `&amp;${name};`;
+    return decoded.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  });
+}
+
+/**
+ * Ensure an HTML fragment (richcontent / hook content) is well-formed XML.
+ * Malformed content (e.g. a bare `&` or `<`, HTML-only entities like &nbsp;) is
+ * repaired by parsing it as HTML and re-serializing it as XHTML.
+ */
+export function ensureWellFormedXmlFragment(html: string): string {
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') {
+    return html;
+  }
+  const cached = wellFormedCache.get(html);
+  if (cached !== undefined) return cached;
+
+  let result = html;
+  const probe = new DOMParser().parseFromString(`<x>${html}</x>`, 'text/xml');
+  if (probe.getElementsByTagName('parsererror').length > 0) {
+    result = replaceHtmlOnlyEntities(html);
+    if (!isWellFormedFragment(result)) {
+      const htmlDoc = new DOMParser().parseFromString(html, 'text/html');
+      const serializer = new XMLSerializer();
+      const source = /<html[\s>]/i.test(html)
+        ? [htmlDoc.documentElement]
+        : Array.from(htmlDoc.body.childNodes);
+      result = replaceHtmlOnlyEntities(
+        source
+          .map(n => serializer.serializeToString(n))
+          .join('')
+          .replace(XHTML_NS_ATTR, '')
+      );
+      if (!isWellFormedFragment(result)) {
+        // Last resort: keep the text content only
+        const text = htmlDoc.body.textContent || '';
+        result = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`;
+      }
+    }
+  }
+
+  if (wellFormedCache.size >= FRAGMENT_CACHE_LIMIT) {
+    const oldestKey = wellFormedCache.keys().next().value;
+    if (oldestKey !== undefined) wellFormedCache.delete(oldestKey);
+  }
+  wellFormedCache.set(html, result);
+  return result;
+}
+
+function encodeRichContent(html: string): string {
+  return encodeNonAsciiHtml(ensureWellFormedXmlFragment(html));
+}
+
 export function serializeFreeMindXml(map: FreeMindMap): string {
   const lines: string[] = [];
   let mapOpen = `<map version="${escapeXmlAttr(map.version || '1.0.1')}"`;
@@ -122,14 +212,14 @@ function serializeNode(node: FreeMindNode, lines: string[], indentLevel: number)
   // 1. Richcontent (NODE)
   if (node.htmlContent) {
     lines.push(`${childIndent}<richcontent TYPE="NODE">`);
-    lines.push(`${childIndent}  ${encodeNonAsciiHtml(node.htmlContent)}`);
+    lines.push(`${childIndent}  ${encodeRichContent(node.htmlContent)}`);
     lines.push(`${childIndent}</richcontent>`);
   }
 
   // 2. Richcontent (NOTE)
   if (node.noteHtml) {
     lines.push(`${childIndent}<richcontent TYPE="NOTE">`);
-    lines.push(`${childIndent}  ${encodeNonAsciiHtml(node.noteHtml)}`);
+    lines.push(`${childIndent}  ${encodeRichContent(node.noteHtml)}`);
     lines.push(`${childIndent}</richcontent>`);
   }
 
@@ -186,7 +276,7 @@ function serializeNode(node: FreeMindNode, lines: string[], indentLevel: number)
       }
     }
     if (hook.content) {
-      lines.push(`${childIndent}<hook ${hookAttrs.join(' ')}>${hook.content}</hook>`);
+      lines.push(`${childIndent}<hook ${hookAttrs.join(' ')}>${encodeRichContent(hook.content)}</hook>`);
     } else {
       lines.push(`${childIndent}<hook ${hookAttrs.join(' ')}/>`);
     }

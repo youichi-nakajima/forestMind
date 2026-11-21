@@ -21,6 +21,8 @@ export const App: React.FC = () => {
     activeTabId,
     activeFilePath,
     initialReloadTabIds,
+    storageLoadFailedTitles,
+    storageSaveFailed,
     setActiveTabId,
     createNewTab,
     markTabSaved,
@@ -66,6 +68,7 @@ export const App: React.FC = () => {
     handleNextSearch,
     handlePrevSearch,
     revealAndSelectNode,
+    openMapAndSelectNode,
   } = useMindMap();
 
   const [zoomScale, setZoomScale] = useState(1.0);
@@ -124,6 +127,32 @@ export const App: React.FC = () => {
     const ok = duplicateNode();
     if (ok) showToast('📑 ノードを複製しました');
   }, [duplicateNode, showToast]);
+
+  // Warn once if some saved tabs could not be restored from localStorage
+  const hasWarnedLoadFailureRef = useRef(false);
+  useEffect(() => {
+    if (hasWarnedLoadFailureRef.current || storageLoadFailedTitles.length === 0) return;
+    hasWarnedLoadFailureRef.current = true;
+    window.alert(
+      `前回のセッションから一部のタブを復元できませんでした:\n${storageLoadFailedTitles.join('\n')}\n\n` +
+        '元のデータはブラウザ内 (localStorage の "forestmind_corrupt_tabs_backup") に退避しています。'
+    );
+  }, [storageLoadFailedTitles]);
+
+  // Warn when auto-save to localStorage fails (e.g. quota exceeded)
+  const hasWarnedSaveFailureRef = useRef(false);
+  useEffect(() => {
+    if (!storageSaveFailed) {
+      hasWarnedSaveFailureRef.current = false;
+      return;
+    }
+    if (hasWarnedSaveFailureRef.current) return;
+    hasWarnedSaveFailureRef.current = true;
+    window.alert(
+      'ブラウザ内への自動保存に失敗しました（容量超過の可能性があります）。\n' +
+        '未保存のマップはファイルに保存し、不要なタブを閉じてください。'
+    );
+  }, [storageSaveFailed]);
 
   // Toggle cinema fullscreen mode
   const handleToggleCinemaMode = useCallback(() => {
@@ -238,19 +267,8 @@ export const App: React.FC = () => {
 
   // Handler for jumping from FreeMindSearcher to map & node
   const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {
-    // Check if map is already open in a tab
-    const existingTab = tabs.find(t => t.map.root.id === targetMap.root.id || t.title === title);
-    if (existingTab) {
-      setActiveTabId(existingTab.id);
-    } else {
-      createNewTab(targetMap, title);
-    }
+    openMapAndSelectNode(targetMap, title, nodeId);
     setIsForestViewOpen(false);
-
-    // Auto-unfold and select after tab switch
-    setTimeout(() => {
-      revealAndSelectNode(nodeId);
-    }, 50);
   };
 
   // Find currently selected node object
@@ -418,22 +436,37 @@ export const App: React.FC = () => {
         return { saved: true };
       }
 
-      if (targetTab.filePath) {
+      const isNonMmFile = Boolean(targetTab.filePath && !/\.mm$/i.test(targetTab.filePath));
+
+      if (targetTab.filePath && !isNonMmFile) {
         const res = await api.saveFile(targetTab.filePath, xml);
         if (res.ok) {
           markTabSaved(tabId, targetTab.filePath);
           showToast(`上書き保存しました: ${targetTab.filePath.split(/[\\/]/).pop()}`);
           return { saved: true, filePath: targetTab.filePath };
         }
-        showToast(`保存に失敗しました: ${res.error || ''}`);
-        return { saved: false };
+        if (res.code !== 'NOT_ALLOWED') {
+          showToast(`保存に失敗しました: ${res.error || ''}`);
+          return { saved: false };
+        }
+        // Path not authorized in this session (e.g. file missing at startup): fall back to Save As
       }
 
-      const res = await api.saveMmFileDialog(fallbackTitle, xml);
+      // Markdown / text files are never overwritten with FreeMind XML: suggest a sibling .mm file instead
+      const suggestedPath = targetTab.filePath
+        ? targetTab.filePath.replace(/\.[^.\\/]+$/, '') + '.mm'
+        : undefined;
+      if (isNonMmFile) {
+        showToast('Markdown ファイルは上書きせず、.mm 形式で別名保存します');
+      }
+      const res = await api.saveMmFileDialog(fallbackTitle, xml, suggestedPath);
       if (!res.canceled && res.filePath) {
         markTabSaved(tabId, res.filePath);
         showToast(`保存しました: ${res.fileName || res.filePath}`);
         return { saved: true, filePath: res.filePath };
+      }
+      if (res.error) {
+        showToast(`保存に失敗しました: ${res.error}`);
       }
       return { saved: false };
     },
@@ -659,9 +692,10 @@ export const App: React.FC = () => {
             tabs={tabs}
             activeTabId={activeTabId}
             onSelectTabAndNode={(tabId, nodeId) => {
-              setActiveTabId(tabId);
               if (nodeId) {
-                setTimeout(() => setSelectedNodeId(nodeId), 0);
+                revealAndSelectNode(nodeId, tabId);
+              } else {
+                setActiveTabId(tabId);
               }
             }}
             onNewTab={() => {

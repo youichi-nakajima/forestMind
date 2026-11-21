@@ -145,5 +145,44 @@ describe('tabStorage', () => {
     expect(loaded.tabs[0].savedPastLength).toBe(0);
     expect(loaded.tabs[1].isDirty).toBe(true);
   });
+
+  it('persists custom tab order and isPinned flags, and normalizes pinned tabs to the left on load', () => {
+    const tabU1 = makeTab({ id: 'tab_u1', title: 'Unpinned 1', isPinned: false });
+    const tabP1 = makeTab({ id: 'tab_p1', title: 'Pinned 1', isPinned: true });
+    const tabU2 = makeTab({ id: 'tab_u2', title: 'Unpinned 2', isPinned: false });
+
+    persistTabsToStorage([tabU1, tabP1, tabU2], 'tab_u2');
+
+    const loaded = loadTabsFromStorage();
+    expect(loaded.tabs.map(t => t.id)).toEqual(['tab_p1', 'tab_u1', 'tab_u2']);
+    expect(loaded.tabs.map(t => t.isPinned)).toEqual([true, false, false]);
+  });
+
+  it('prepareTabsForAppClose preserves isPinned state across clean, saved, and discarded file-backed tabs', () => {
+    const pinnedSaved = makeTab({
+      id: 'tab_p_saved',
+      isPinned: true,
+      isDirty: true,
+      past: [cloneMap()],
+    });
+    const pinnedDiscarded = makeTab({
+      id: 'tab_p_discarded',
+      isPinned: true,
+      filePath: 'C:\\maps\\pinned.mm',
+      isDirty: true,
+      past: [cloneMap()],
+    });
+
+    const result = prepareTabsForAppClose(
+      [pinnedSaved, pinnedDiscarded],
+      'tab_p_saved',
+      new Map([['tab_p_saved', 'C:\\maps\\saved_pinned.mm']]),
+      new Set(['tab_p_discarded'])
+    );
+
+    expect(result.tabs.map(t => t.isPinned)).toEqual([true, true]);
+    expect(result.tabs[0].isDirty).toBe(false);
+    expect(result.tabs[1].isDirty).toBe(false);
+  });
 });
 

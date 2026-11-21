@@ -27,6 +27,8 @@ export const App: React.FC = () => {
     openFileInTab,
     reconcileTabWithDisk,
     closeTab,
+    togglePinTab,
+    reorderTabs,
     map,
     selectedNodeId,
     setSelectedNodeId,
@@ -444,11 +446,14 @@ export const App: React.FC = () => {
 
   const handleCloseTab = useCallback(
     async (tabId: string) => {
+      const targetTab = tabs.find(t => t.id === tabId);
+      if (targetTab?.isPinned) {
+        return;
+      }
       if (tabs.length <= 1) {
         closeTab(tabId);
         return;
       }
-      const targetTab = tabs.find(t => t.id === tabId);
       if (targetTab?.isDirty) {
         const tabTitle = targetTab.map.root.text || targetTab.title || '無題マップ';
         const api = window.electronAPI;
@@ -641,6 +646,8 @@ export const App: React.FC = () => {
           createNewTab();
           setIsForestViewOpen(false);
         }}
+        onTogglePinTab={togglePinTab}
+        onReorderTabs={reorderTabs}
         isForestViewOpen={isForestViewOpen}
         onToggleForestView={() => setIsForestViewOpen(prev => !prev)}
       />

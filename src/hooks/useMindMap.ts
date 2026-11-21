@@ -14,6 +14,7 @@ import {
   cancelPendingNewNodeOnTab,
   commitPendingNewNodeTextOnTab,
 } from '../utils/pendingNodeEdit';
+import { reorderTabsInList, toggleTabPinnedInList } from '../utils/tabOrder';
 
 export interface MapTab {
   id: string;
@@ -24,6 +25,7 @@ export interface MapTab {
   future: FreeMindMap[];
   selectedNodeId: string | null;
   isDirty?: boolean;
+  isPinned?: boolean;
   savedPastLength?: number;
 }
 
@@ -240,6 +242,10 @@ export function useMindMap() {
   );
 
   const closeTab = useCallback((tabId: string) => {
+    const target = tabs.find(t => t.id === tabId);
+    if (target?.isPinned) {
+      return;
+    }
     if (tabs.length <= 1) {
       alert('最後のタブは閉じることができません。');
       return;
@@ -251,6 +257,17 @@ export function useMindMap() {
       setActiveTabId(remaining[0]?.id || '');
     }
   }, [tabs, activeTabId]);
+
+  const togglePinTab = useCallback((tabId: string) => {
+    setTabs(prev => toggleTabPinnedInList(prev, tabId));
+  }, []);
+
+  const reorderTabs = useCallback(
+    (draggedTabId: string, targetTabId: string, position: 'before' | 'after') => {
+      setTabs(prev => reorderTabsInList(prev, draggedTabId, targetTabId, position));
+    },
+    []
+  );
 
   const setSelectedNodeId = useCallback(
     (nodeId: string | null) => {
@@ -1015,6 +1032,8 @@ export function useMindMap() {
     openFileInTab,
     reconcileTabWithDisk,
     closeTab,
+    togglePinTab,
+    reorderTabs,
     map,
     selectedNodeId,
     setSelectedNodeId,

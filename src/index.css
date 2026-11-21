@@ -228,10 +228,12 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 0 2px;
   overflow-x: auto;
 }
 
 .tab-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -261,6 +263,51 @@ body {
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
 }
 
+.tab-item.pinned {
+  background-color: rgba(236, 253, 245, 0.72);
+  border-color: #d1fae5;
+  color: #065f46;
+}
+
+.tab-item.pinned.active {
+  background-color: var(--bg-surface);
+  color: var(--accent-color);
+  border-color: var(--border-color);
+}
+
+.tab-item.dragging {
+  opacity: 0.45;
+}
+
+.tab-item.drop-before::before,
+.tab-item.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2.5px;
+  background-color: var(--primary-color);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tab-item.drop-before::before {
+  left: -2px;
+}
+
+.tab-item.drop-after::after {
+  right: -2px;
+}
+
+.tab-pinned-divider {
+  width: 1px;
+  height: 18px;
+  background-color: #cbd5e1;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
 .tab-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -273,6 +320,46 @@ body {
   color: #ea580c;
   margin-left: -2px;
   line-height: 1;
+}
+
+.tab-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: -2px 0 -2px -3px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tab-pin-btn:hover {
+  background-color: rgba(15, 23, 42, 0.08);
+  color: var(--primary-color);
+}
+
+.tab-pin-btn .tab-icon-pin-hover {
+  display: none;
+}
+
+.tab-pin-btn:hover .tab-icon-default {
+  display: none;
+}
+
+.tab-pin-btn:hover .tab-icon-pin-hover {
+  display: inline-block;
+}
+
+.tab-pin-btn.pinned {
+  color: var(--accent-color);
+}
+
+.tab-pin-btn.pinned .tab-pin-icon {
+  transform: rotate(35deg);
 }
 
 .tab-icon {
@@ -2553,6 +2640,37 @@ body {
 
 .app-container.theme-dark .tab-item:hover {
   background-color: #283548;
+}
+
+.app-container.theme-dark .tab-pin-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #34d399;
+}
+
+.app-container.theme-dark .tab-pin-btn.pinned {
+  color: #34d399;
+}
+
+.app-container.theme-dark .tab-item.pinned {
+  background-color: rgba(6, 78, 59, 0.45);
+  border-color: #065f46;
+  color: #a7f3d0;
+}
+
+.app-container.theme-dark .tab-item.pinned.active {
+  background-color: #111827;
+  color: #34d399;
+  border-color: #065f46;
+  border-bottom-color: #10b981;
+}
+
+.app-container.theme-dark .tab-pinned-divider {
+  background-color: #374151;
+}
+
+.app-container.theme-dark .tab-item.drop-before::before,
+.app-container.theme-dark .tab-item.drop-after::after {
+  background-color: #10b981;
 }
 
 .app-container.theme-dark .shortcut-chip {

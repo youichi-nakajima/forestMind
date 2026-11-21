@@ -2,6 +2,7 @@ import type { MapTab } from '../hooks/useMindMap';
 import { initialFreeMindMap } from '../data/defaultMap';
 import { parseFreeMindXml } from '../parser/freemindParser';
 import { serializeFreeMindXml } from '../parser/freemindSerializer';
+import { normalizeTabOrder } from './tabOrder';
 
 export const STORAGE_KEY_TABS = 'forestmind_saved_tabs_v2';
 export const STORAGE_KEY_ACTIVE_TAB = 'forestmind_active_tab_id_v2';
@@ -11,6 +12,7 @@ export interface SerializedTab {
   title: string;
   filePath?: string;
   isDirty?: boolean;
+  isPinned?: boolean;
   reloadFromDisk?: boolean;
   xml: string;
 }
@@ -39,6 +41,7 @@ export function serializeTabsForStorage(
       title: t.map.root.text || t.title,
       filePath: t.filePath,
       isDirty: shouldReload ? false : Boolean(t.isDirty),
+      isPinned: t.isPinned ? true : undefined,
       reloadFromDisk: shouldReload ? true : undefined,
       xml: serializeFreeMindXml(t.map),
     };
@@ -66,7 +69,7 @@ export function loadTabsFromStorage(): { tabs: MapTab[]; reloadFromDiskIds: stri
     if (saved) {
       const parsed = JSON.parse(saved) as SerializedTab[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const tabs = parsed.map(t => {
+        const tabs: MapTab[] = parsed.map(t => {
           const mapObj = parseFreeMindXml(t.xml);
           const needsReload = Boolean(t.reloadFromDisk && t.filePath);
           if (needsReload) {
@@ -82,10 +85,11 @@ export function loadTabsFromStorage(): { tabs: MapTab[]; reloadFromDiskIds: stri
             future: [],
             selectedNodeId: mapObj.root.id,
             isDirty: dirty,
+            isPinned: Boolean(t.isPinned),
             savedPastLength: dirty ? undefined : 0,
           };
         });
-        return { tabs, reloadFromDiskIds };
+        return { tabs: normalizeTabOrder(tabs), reloadFromDiskIds };
       }
     }
   } catch (e) {

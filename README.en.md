@@ -27,8 +27,8 @@ A modern **FreeMind 1.0.1 compatible** mind map editor. Running both in the brow
 - **Interactive Minimap & Fit to Screen (`Ctrl+0`)**: overview minimap in the bottom-right corner with click/drag navigation and one-key fit-to-screen
 - **Note Popover**: hover or click note icons to preview HTML / simple Markdown notes, with quick edit and delete actions
 - **Unsaved Indicator (`*`) & Close Confirmation**: marks dirty tabs with `*` and prompts to save before closing tabs or exiting the app
-- **Smooth New-Node Editing**: editing a newly created placeholder node automatically clears the default text
-- **Desktop Direct File I/O**: `Ctrl+S` to save / save-as, and double-click `.mm` files from Explorer to open in tabs
+- **Smooth New-Node Editing**: editing a newly created placeholder node automatically clears the default text (and pressing `Esc` right after creating a node deletes it and cancels cleanly)
+- **Desktop Direct File I/O**: `Ctrl+S` to save / save-as, remembers the last-used folder in Open/Save dialogs, and opens `.mm` files on double-click from Explorer into tabs
 - Expand / collapse, expand all / collapse all, Undo / Redo, infinite canvas panning & zooming (25%–300%), and in-map keyword search
 
 ### 🎨 Node Properties Panel
@@ -104,6 +104,7 @@ Scan a local folder recursively to search across `.mm` files:
 | `Ctrl` + `D` | Duplicate selected node |
 | `Alt` + `↑` / `↓` | Move sibling node up / down |
 | `F2` / Double-click | Inline text edit |
+| `Esc` (right after creation) | Delete newly created node and cancel |
 | `Delete` / `Backspace` | Delete selected node |
 | Drag & Drop | Reparent node |
 

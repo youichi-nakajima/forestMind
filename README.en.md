@@ -18,18 +18,20 @@ A modern **FreeMind 1.0.1 compatible** mind map editor. Running both in the brow
 ### 📝 Mind Map Editing
 
 - Auto-balanced left/right layout around the root node with smooth Bezier branch rendering
-- Keyboard-first fast node creation, editing, and navigation ([Keyboard Shortcuts](#️-keyboard-shortcuts))
+- Keyboard-first fast node creation, editing, and navigation ([Keyboard Shortcuts](#-keyboard-shortcuts))
 - **Copy / Cut / Paste** (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`): supports internal subtree cloning as well as pasting external Markdown bullet lists directly into a tree
 - **Quick Duplicate** (`Ctrl+D`): clone the selected subtree right below itself
 - **Keyboard Reordering** (`Alt+↑` / `Alt+↓`): reorder sibling nodes without touching the mouse
 - **Drag & Drop Visual Guide**: highlights the drop target with a badge and glow to prevent mistakes
 - **Dark Theme**: one-click toggle between light and dark modes from the toolbar (🌙 / ☀️)
+- **Quick Styling, Icons & Attribute Tags**: press `1`–`6` to apply/toggle color presets (`0` to clear), `Alt+1`–`9` for built-in icons, or `Q` / `Ctrl+K` to open the floating palette for priority/status attribute tags across single or `Ctrl+Click` multi-selected nodes (with automatic high-contrast dark mode rendering)
 - **Interactive Minimap & Fit to Screen (`Ctrl+0`)**: overview minimap in the bottom-right corner with click/drag navigation and one-key fit-to-screen
 - **Note Popover**: hover or click note icons to preview HTML / simple Markdown notes, with quick edit and delete actions
 - **Unsaved Indicator (`*`) & Close Confirmation**: marks dirty tabs with `*` and prompts to save before closing tabs or exiting the app
 - **Smooth New-Node Editing**: editing a newly created placeholder node automatically clears the default text (and pressing `Esc` right after creating a node deletes it and cancels cleanly)
 - **Desktop Direct File I/O**: `Ctrl+S` to save / save-as, remembers the last-used folder in Open/Save dialogs, and opens `.mm` files on double-click from Explorer into tabs
 - Expand / collapse, expand all / collapse all, Undo / Redo, infinite canvas panning & zooming (25%–300%), and in-map keyword search
+- **About Modal**: click `forestMind` on the top-left toolbar to view version details, copy runtime environment info, check license info, and access GitHub / Buy Me a Coffee links
 
 ### 🎨 Node Properties Panel
 
@@ -109,6 +111,17 @@ Scan a local folder recursively to search across `.mm` files:
 | `Esc` (right after creation) | Delete newly created node and cancel |
 | `Delete` / `Backspace` | Delete selected node |
 | Drag & Drop | Reparent node |
+
+### Quick Styling, Icons & Tags
+
+| Shortcut | Action |
+| --- | --- |
+| `1` – `6` | Apply / toggle quick color preset |
+| `0` | Clear node colors |
+| `Alt` + `1` – `9` | Toggle built-in FreeMind icon |
+| `Alt` + `0` | Clear all node icons |
+| `Q` / `Ctrl` + `K` | Toggle floating quick style palette |
+| `Ctrl` + Click | Multi-select / deselect nodes |
 
 ### Navigation & View
 
@@ -190,6 +203,16 @@ npm run dev
 - [ESLint 9](https://eslint.org/) + typescript-eslint + eslint-plugin-react-hooks
 - [lucide-react](https://lucide.dev/)
 - Web Audio API, File System Access API
+
+## 📖 User Guide
+
+An end-user guide (in Japanese) is available in [USER_GUIDE.md](USER_GUIDE.md) and [USER_GUIDE.pdf](USER_GUIDE.pdf).
+
+## ☕ Support
+
+If you find **forestMind** helpful, buying a coffee is greatly appreciated and motivates further development:
+
+- ☕ **Buy Me a Coffee**: https://buymeacoffee.com/youichinakq
 
 ## 📄 License
 

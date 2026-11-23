@@ -10,6 +10,7 @@ export interface FreeMindSearchQuery {
 
 export interface FreeMindSearchResult {
   id: string;
+  filePath?: string;
   fileName: string;
   relativePath: string;
   nodeId: string;
@@ -23,6 +24,7 @@ export interface FreeMindSearchResult {
 }
 
 export interface ScannedFileItem {
+  filePath?: string;
   fileName: string;
   relativePath: string;
   xmlContent: string;

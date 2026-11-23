@@ -190,7 +190,7 @@ export const initialFreeMindMap: FreeMindMap = {
           },
           {
             id: 'ID_L1_3',
-            text: 'FreeMindSearcher: ローカル .mm 横断検索',
+            text: 'ローカルフォルダ配下の .mm 横断検索',
             icons: [{ builtin: 'help' }],
             attributes: [],
             arrowLinks: [],

@@ -71,11 +71,11 @@ Replay how your mind map grew node-by-node with animation. Press `F5` to start/s
 - **Playback Speed**: 0.5s / 1s / 2s / 3.5s / 5s per step, plus seek bar
 - **Bubble Pop Sound (`M`)**: synthesized via Web Audio API (no external audio files), ascending along a pentatonic scale by node depth
 
-### 🔍 FreeMindSearcher (Local Folder Search)
+### 🔍 Local Folder Search
 
 Scan a local folder recursively to search across `.mm` files:
 
-- Recursive folder scan (via File System Access API, with fallback folder picker)
+- Recursive folder scan (native folder dialog on Desktop, File System Access API with fallback folder picker on Web)
 - Case-insensitive keyword search with automatic numeric character reference decoding
 - Breadcrumb path display (`Parent > Child > Target`)
 - Filter by modified date range and icons

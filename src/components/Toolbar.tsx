@@ -176,11 +176,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
           <button
             className="toolbar-btn searcher-trigger-btn"
-            title="PC上のフォルダ配下の全.mmファイルを再帰探索・検索 (FreeMindSearcher)"
+            title="PC上のフォルダ配下の全 .mm ファイルを横断検索"
             onClick={onOpenSearcher}
           >
             <FolderSearch size={15} className="searcher-btn-icon" />
-            <span>フォルダ横断探索 (FreeMindSearcher)</span>
+            <span>フォルダ横断検索</span>
           </button>
         </div>
 
@@ -428,7 +428,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       {/* Folder Search trigger icon on map toolbar */}
       <button
         className="toolbar-btn icon-only"
-        title="PC上のフォルダ配下の全.mmファイルを再帰探索・検索 (FreeMindSearcher)"
+        title="PC上のフォルダ配下の全 .mm ファイルを横断検索"
         onClick={onOpenSearcher}
       >
         <FolderSearch size={16} />

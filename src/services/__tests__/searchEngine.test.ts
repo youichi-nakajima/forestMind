@@ -1,9 +1,16 @@
-import { describe, it, expect } from 'vitest';
-import { executeFreeMindSearch, generateCsvExport } from '../freeMindSearchEngine';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  executeFreeMindSearch,
+  generateCsvExport,
+  parseScannedRawFiles,
+  SEARCH_ICON_MAP,
+  SEARCH_ICON_OPTIONS,
+} from '../freeMindSearchEngine';
 import { parseFreeMindXml } from '../../parser/freemindParser';
 import { ScannedFileItem } from '../../types/searcher';
+import { NODE_ICONS } from '../../utils/quickStyle';
 
-describe('FreeMindSearchEngine (FreeMindSearcher Features)', () => {
+describe('FreeMindSearchEngine (Local Folder Search)', () => {
   const xmlSample = `
   <map version="1.0.1">
     <node ID="ID_ROOT" TEXT="資格・試験">
@@ -75,6 +82,46 @@ describe('FreeMindSearchEngine (FreeMindSearcher Features)', () => {
     expect(csv).toContain('資格.mm');
     expect(csv).toContain('Oracle Master');
     expect(csv).toContain('資格・試験 > IT系 > Oracle Master');
+  });
+
+  it('aligns SEARCH_ICON_OPTIONS and SEARCH_ICON_MAP with NODE_ICONS', () => {
+    expect(SEARCH_ICON_OPTIONS).toEqual(NODE_ICONS);
+    expect(Object.keys(SEARCH_ICON_MAP)).toEqual(NODE_ICONS.map(ic => ic.builtin));
+    expect(SEARCH_ICON_MAP.flag).toEqual({ label: '重要', emoji: '🚩' });
+    expect(SEARCH_ICON_MAP.star).toEqual({ label: '注目', emoji: '⭐' });
+    expect(SEARCH_ICON_MAP.bookmark).toEqual({ label: 'ブックマーク', emoji: '🔖' });
+    expect(SEARCH_ICON_MAP.clanbomber).toEqual({ label: '森', emoji: '🌲' });
+    expect(SEARCH_ICON_MAP.folder).toEqual({ label: 'フォルダ', emoji: '📁' });
+    expect(SEARCH_ICON_MAP.attach).toEqual({ label: '添付', emoji: '📎' });
+  });
+
+  it('parses raw scanned files, preserves filePath, and skips invalid XML', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const items = parseScannedRawFiles([
+      {
+        filePath: 'C:\\maps\\study\\資格.mm',
+        fileName: '資格.mm',
+        relativePath: 'study',
+        xmlContent: xmlSample,
+        fileSize: 512,
+      },
+      {
+        filePath: 'C:\\maps\\broken.mm',
+        fileName: 'broken.mm',
+        relativePath: '.',
+        xmlContent: '<map><node',
+        fileSize: 10,
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].filePath).toBe('C:\\maps\\study\\資格.mm');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    const results = executeFreeMindSearch(items, { keyword: '12c' });
+    expect(results).toHaveLength(1);
+    expect(results[0].filePath).toBe('C:\\maps\\study\\資格.mm');
+    warnSpy.mockRestore();
   });
 });
 

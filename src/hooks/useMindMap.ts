@@ -1196,15 +1196,21 @@ export function useMindMap() {
   );
 
   const openMapAndSelectNode = useCallback(
-    (targetMap: FreeMindMap, title: string, nodeId: string) => {
+    (targetMap: FreeMindMap, title: string, nodeId: string, filePath?: string) => {
       pendingNewNodeRef.current = null;
       lastPropEditRef.current = null;
       setEditingNodeIdRaw(null);
-      const existingTab = tabsRef.current.find(
-        t =>
-          t.map.root.id === targetMap.root.id &&
-          (t.title === title || t.map.root.text === targetMap.root.text)
-      );
+      const normalizedPath = filePath?.toLowerCase();
+      const existingTab =
+        (normalizedPath
+          ? tabsRef.current.find(t => t.filePath?.toLowerCase() === normalizedPath)
+          : undefined) ??
+        tabsRef.current.find(
+          t =>
+            (!normalizedPath || !t.filePath) &&
+            t.map.root.id === targetMap.root.id &&
+            (t.title === title || t.map.root.text === targetMap.root.text)
+        );
       if (existingTab) {
         revealAndSelectNode(nodeId, existingTab.id);
         return;
@@ -1215,6 +1221,7 @@ export function useMindMap() {
       const newTab: MapTab = {
         id: newId,
         title: preparedMap.root.text || title || '新規マップ',
+        filePath,
         map: preparedMap,
         past: [],
         future: [],

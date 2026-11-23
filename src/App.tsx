@@ -12,6 +12,7 @@ import { AboutModal } from './components/AboutModal';
 import { QuickStylePalette } from './components/QuickStylePalette';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
+import { parseFreeMindXml } from './parser/freemindParser';
 import { resumeAudioContext } from './utils/audio';
 import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
@@ -285,9 +286,35 @@ export const App: React.FC = () => {
     }
   }, [activeTabId, stopPresentation]);
 
-  // Handler for jumping from FreeMindSearcher to map & node
-  const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {
-    openMapAndSelectNode(targetMap, title, nodeId);
+  // Handler for jumping from local folder search to map & node
+  const handleOpenSearcherNode = async (
+    targetMap: FreeMindMap,
+    title: string,
+    nodeId: string,
+    filePath?: string
+  ) => {
+    let mapToOpen = targetMap;
+    let resolvedFilePath = filePath;
+
+    if (filePath && window.electronAPI?.readFileByPath) {
+      const normalizedPath = filePath.toLowerCase();
+      const alreadyOpen = tabsRef.current.some(
+        t => t.filePath?.toLowerCase() === normalizedPath
+      );
+      if (!alreadyOpen) {
+        try {
+          const res = await window.electronAPI.readFileByPath(filePath);
+          if (res.ok && res.content !== undefined && res.filePath) {
+            mapToOpen = parseFreeMindXml(res.content);
+            resolvedFilePath = res.filePath;
+          }
+        } catch (err) {
+          console.warn('Failed to authorize/read searched .mm file:', err);
+        }
+      }
+    }
+
+    openMapAndSelectNode(mapToOpen, title, nodeId, resolvedFilePath);
     setExtraSelectedNodeIds([]);
     setIsForestViewOpen(false);
   };
@@ -987,7 +1014,7 @@ export const App: React.FC = () => {
         onOpenHelp={() => setIsHelpOpen(true)}
       />
 
-      {/* FreeMindSearcher Folder Search Modal */}
+      {/* Local Folder Search Modal */}
       <FreeMindSearcherModal
         isOpen={isSearcherOpen}
         onClose={() => setIsSearcherOpen(false)}

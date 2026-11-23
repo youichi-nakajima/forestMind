@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { createSettingsStore, resolveSaveDefaultPath } = require('./settingsStore.cjs');
+const { scanMmDirectory } = require('./folderScanner.cjs');
 
 let mainWindow = null;
 let initialFilePath = null;
@@ -352,6 +353,19 @@ app.whenReady().then(() => {
       console.error('Failed to pick target .mm file:', err);
       return null;
     }
+  });
+
+  ipcMain.handle('dialog:scanMmFolder', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: '検索対象のフォルダを選択',
+      defaultPath: settingsStore?.getLastUsedDir(),
+      properties: ['openDirectory'],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    const rootDir = res.filePaths[0];
+    settingsStore?.saveLastUsedDir(rootDir);
+    return await scanMmDirectory(rootDir);
   });
 
   ipcMain.handle('dialog:confirmUnsaved', async (_event, title) => {

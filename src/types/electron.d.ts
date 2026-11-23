@@ -42,6 +42,20 @@ export interface ElectronAppInfo {
   arch: string;
 }
 
+export interface ElectronScannedMmFile {
+  filePath: string;
+  fileName: string;
+  relativePath: string;
+  xmlContent: string;
+  fileSize: number;
+}
+
+export interface ElectronScanFolderResult {
+  rootDir: string;
+  dirName: string;
+  files: ElectronScannedMmFile[];
+}
+
 export interface ElectronAPI {
   isElectron: boolean;
   getAppInfo?: () => Promise<ElectronAppInfo>;
@@ -56,6 +70,7 @@ export interface ElectronAPI {
     baseFilePath?: string
   ) => Promise<ElectronSaveDialogResult>;
   pickTargetMmFile: (baseFilePath?: string) => Promise<ElectronPickLinkResult | null>;
+  scanMmFolder?: () => Promise<ElectronScanFolderResult | null>;
   confirmUnsaved: (title: string) => Promise<'save' | 'discard' | 'cancel'>;
   onRequestClose: (callback: () => void) => () => void;
   confirmAppClose: () => void;

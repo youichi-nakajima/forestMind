@@ -1,26 +1,55 @@
 import { FreeMindNode } from '../types/freemind';
 import { parseFreeMindXml } from '../parser/freemindParser';
+import { NODE_ICONS } from '../utils/quickStyle';
 import {
   FreeMindSearchQuery,
   FreeMindSearchResult,
   ScannedFileItem,
 } from '../types/searcher';
 
-export const SEARCH_ICON_MAP: Record<string, { label: string; emoji: string }> = {
-  button_ok: { label: 'OK (完了)', emoji: '✅' },
-  button_cancel: { label: '× (中止/NG)', emoji: '❌' },
-  help: { label: '? (疑問/ヘルプ)', emoji: '❓' },
-  messagebox_warning: { label: '! (警告/注意)', emoji: '⚠️' },
-  bookmark: { label: '★ (ブックマーク)', emoji: '⭐' },
-  idea: { label: 'アイデア', emoji: '💡' },
-  launch: { label: 'ロケット', emoji: '🚀' },
-  pencil: { label: '編集/鉛筆', emoji: '✏️' },
-  'full-1': { label: '① 優先度1', emoji: '①' },
-  'full-2': { label: '② 優先度2', emoji: '②' },
-  'full-3': { label: '③ 優先度3', emoji: '③' },
-  'full-4': { label: '④ 優先度4', emoji: '④' },
-  'full-5': { label: '⑤ 優先度5', emoji: '⑤' },
-};
+export const SEARCH_ICON_OPTIONS = NODE_ICONS;
+
+export const SEARCH_ICON_MAP: Record<string, { label: string; emoji: string }> = Object.fromEntries(
+  NODE_ICONS.map(ic => [ic.builtin, { label: ic.label, emoji: ic.emoji }])
+);
+
+export interface RawScannedMmFile {
+  filePath?: string;
+  fileName: string;
+  relativePath: string;
+  xmlContent: string;
+  fileSize: number;
+}
+
+function createScannedFileItem(raw: RawScannedMmFile): ScannedFileItem {
+  return {
+    filePath: raw.filePath,
+    fileName: raw.fileName,
+    relativePath: raw.relativePath,
+    xmlContent: raw.xmlContent,
+    map: parseFreeMindXml(raw.xmlContent),
+    fileSize: raw.fileSize,
+  };
+}
+
+/**
+ * Parse raw .mm file payloads (e.g. from Electron main process) into ScannedFileItem entries.
+ */
+export function parseScannedRawFiles(
+  rawFiles: RawScannedMmFile[],
+  onProgress?: (scannedCount: number, currentFile: string) => void
+): ScannedFileItem[] {
+  const items: ScannedFileItem[] = [];
+  for (const raw of rawFiles) {
+    try {
+      items.push(createScannedFileItem(raw));
+      onProgress?.(items.length, raw.fileName);
+    } catch (e) {
+      console.warn(`Failed to parse ${raw.filePath || raw.fileName}:`, e);
+    }
+  }
+  return items;
+}
 
 /**
  * Format timestamp (epoch ms) into YYYY/MM/DD HH:mm:ss
@@ -60,14 +89,14 @@ export async function scanDirectoryHandle(
           try {
             const file = await (entry as FileSystemFileHandle).getFile();
             const text = await file.text();
-            const map = parseFreeMindXml(text);
-            items.push({
-              fileName: entry.name,
-              relativePath: currentPath || '.',
-              xmlContent: text,
-              map,
-              fileSize: file.size,
-            });
+            items.push(
+              createScannedFileItem({
+                fileName: entry.name,
+                relativePath: currentPath || '.',
+                xmlContent: text,
+                fileSize: file.size,
+              })
+            );
             if (onProgress) {
               onProgress(items.length, entry.name);
             }
@@ -106,19 +135,18 @@ export async function scanFileList(
     const file = files[i];
     try {
       const text = await file.text();
-      const map = parseFreeMindXml(text);
-
       const webkitPath = file.webkitRelativePath || file.name;
       const parts = webkitPath.split('/');
       const relFolder = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
 
-      items.push({
-        fileName: file.name,
-        relativePath: relFolder,
-        xmlContent: text,
-        map,
-        fileSize: file.size,
-      });
+      items.push(
+        createScannedFileItem({
+          fileName: file.name,
+          relativePath: relFolder,
+          xmlContent: text,
+          fileSize: file.size,
+        })
+      );
 
       if (onProgress) {
         onProgress(items.length, file.name);
@@ -132,7 +160,7 @@ export async function scanFileList(
 }
 
 /**
- * Search across all scanned FreeMind files with criteria matching FreeMindSearcher:
+ * Search across all scanned FreeMind files:
  * 1. Keyword search (case-insensitive in node text, link, and note)
  * 2. Date range filter (From / To on node.modified)
  * 3. Icon filter (FreeMind builtin icons)
@@ -208,7 +236,8 @@ export function executeFreeMindSearch(
         const breadcrumbPath = [...cleanAncestors, currentText].join(' > ');
 
         results.push({
-          id: `${item.fileName}_${node.id}_${results.length}`,
+          id: `${item.filePath || `${item.relativePath}/${item.fileName}`}_${node.id}_${results.length}`,
+          filePath: item.filePath,
           fileName: item.fileName,
           relativePath: item.relativePath,
           nodeId: node.id,
@@ -235,7 +264,7 @@ export function executeFreeMindSearch(
 }
 
 /**
- * Generate CSV with UTF-8 BOM for Excel compatibility (FreeMindSearcher feature)
+ * Generate CSV with UTF-8 BOM for Excel compatibility
  */
 export function generateCsvExport(results: FreeMindSearchResult[]): string {
   const header = ['ファイル名', 'フォルダ', '階層パス (パンくず)', 'ノードテキスト', 'アイコン', '更新日時', 'リンク'];

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveMmFileDialog: (defaultName, content, baseFilePath) =>
     ipcRenderer.invoke('dialog:saveMmFile', defaultName, content, baseFilePath),
   pickTargetMmFile: baseFilePath => ipcRenderer.invoke('dialog:pickTargetMmFile', baseFilePath),
+  scanMmFolder: () => ipcRenderer.invoke('dialog:scanMmFolder'),
   confirmUnsaved: title => ipcRenderer.invoke('dialog:confirmUnsaved', title),
   onRequestClose: callback => {
     const listener = () => callback();

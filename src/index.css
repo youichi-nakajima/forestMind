@@ -1539,7 +1539,7 @@ body {
   font-family: monospace;
 }
 
-/* FreeMindSearcher Trigger Button */
+/* Folder Search Trigger Button */
 .searcher-trigger-btn {
   background-color: #f0fdf4;
   color: #047857;
@@ -1557,7 +1557,7 @@ body {
   color: #059669;
 }
 
-/* FreeMindSearcher Modal Styles */
+/* Folder Search Modal Styles */
 .searcher-modal-dialog {
   max-width: 1100px;
   width: 94vw;
@@ -2875,7 +2875,7 @@ body {
   background-color: #0f2922;
 }
 
-/* Dark Theme: FreeMindSearcher Modal */
+/* Dark Theme: Folder Search Modal */
 .app-container.theme-dark .searcher-modal-header {
   background-color: #111827;
   border-color: #1f2937;

@@ -171,6 +171,15 @@ app.whenReady().then(() => {
     callback(ALLOWED_PERMISSIONS.has(permission));
   });
 
+  ipcMain.handle('app:getInfo', () => ({
+    version: app.getVersion(),
+    electron: process.versions.electron || '',
+    chrome: process.versions.chrome || '',
+    node: process.versions.node || '',
+    platform: process.platform,
+    arch: process.arch,
+  }));
+
   ipcMain.handle('app:getInitialFile', () => {
     if (!initialFilePath || !fs.existsSync(initialFilePath)) return null;
     try {

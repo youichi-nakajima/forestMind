@@ -3,12 +3,20 @@ import { FreeMindMap } from '../types/freemind';
 import { computeLayout, LayoutNode, EdgePath } from '../utils/layout';
 import { computeMapBounds } from '../utils/exportImage';
 import { renderNoteForPopover, sanitizeNodeHtml } from '../utils/noteRenderer';
-import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2 } from 'lucide-react';
+import {
+  getAttributeTone,
+  getDigitFromKeyboardEvent,
+  resolveNodeDisplayColors,
+} from '../utils/quickStyle';
+import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 interface MindMapCanvasProps {
   map: FreeMindMap;
   selectedNodeId: string | null;
+  selectedNodeIds?: string[];
   setSelectedNodeId: (id: string | null) => void;
+  onToggleNodeSelection?: (nodeId: string) => void;
+  isDarkMode?: boolean;
   editingNodeId: string | null;
   setEditingNodeId: (id: string | null) => void;
   onCancelEditing?: () => void;
@@ -25,6 +33,9 @@ interface MindMapCanvasProps {
   setZoomScale: (updater: (prev: number) => number) => void;
   panOffset: { x: number; y: number };
   setPanOffset: (updater: (prev: { x: number; y: number }) => { x: number; y: number }) => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetZoom?: () => void;
   onFitToScreen?: () => void;
   searchMatchedIds?: string[];
   onNavigateTab?: (tabId: string) => void;
@@ -40,12 +51,23 @@ interface MindMapCanvasProps {
   onPasteNode?: () => void;
   onDuplicateNode?: () => void;
   onReorderNode?: (nodeId: string, direction: 'up' | 'down') => void;
+  onQuickColor?: (key: string) => void;
+  onQuickClearColor?: () => void;
+  onQuickToggleIcon?: (key: string) => void;
+  onQuickClearIcons?: () => void;
+  onToggleQuickPalette?: () => void;
+  isQuickPaletteOpen?: boolean;
+  onCloseQuickPalette?: () => void;
+  quickPaletteOverlay?: React.ReactNode;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   map,
   selectedNodeId,
+  selectedNodeIds = [],
   setSelectedNodeId,
+  onToggleNodeSelection,
+  isDarkMode = false,
   editingNodeId,
   setEditingNodeId,
   onCancelEditing,
@@ -61,12 +83,23 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onPasteNode,
   onDuplicateNode,
   onReorderNode,
+  onQuickColor,
+  onQuickClearColor,
+  onQuickToggleIcon,
+  onQuickClearIcons,
+  onToggleQuickPalette,
+  isQuickPaletteOpen = false,
+  onCloseQuickPalette,
+  quickPaletteOverlay,
   onUndo,
   onRedo,
   zoomScale,
   setZoomScale,
   panOffset,
   setPanOffset,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
   onFitToScreen,
   searchMatchedIds = [],
   onNavigateTab,
@@ -225,7 +258,20 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         return;
       }
 
+      if (e.isComposing || (e as unknown as { keyCode?: number }).keyCode === 229) {
+        return;
+      }
+
+      if (document.querySelector('.modal-backdrop')) {
+        return;
+      }
+
       if (e.key === 'Escape') {
+        if (isQuickPaletteOpen) {
+          e.preventDefault();
+          onCloseQuickPalette?.();
+          return;
+        }
         setNotePopover(prev => (prev ? null : prev));
       }
 
@@ -238,6 +284,16 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           activeEl.tagName === 'SELECT' ||
           activeEl.isContentEditable)
       ) {
+        return;
+      }
+
+      // Toggle Quick Style Palette via Ctrl+K or Q
+      if (
+        ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') ||
+        (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'q')
+      ) {
+        e.preventDefault();
+        onToggleQuickPalette?.();
         return;
       }
 
@@ -303,6 +359,32 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         e.preventDefault();
         onReorderNode?.(selectedNodeId, e.key === 'ArrowUp' ? 'up' : 'down');
         return;
+      }
+
+      // Quick color (1-6 / 0) and icon (Alt+1-9 / Alt+0) shortcuts
+      const digit = getDigitFromKeyboardEvent(e);
+      if (digit !== null) {
+        if (e.altKey && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          if (digit === '0') {
+            onQuickClearIcons?.();
+          } else {
+            onQuickToggleIcon?.(digit);
+          }
+          return;
+        }
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+          if (digit === '0') {
+            e.preventDefault();
+            onQuickClearColor?.();
+            return;
+          }
+          if (digit >= '1' && digit <= '6') {
+            e.preventDefault();
+            onQuickColor?.(digit);
+            return;
+          }
+        }
       }
 
       const currentLayout = layoutNodes.get(selectedNodeId);
@@ -389,6 +471,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onPasteNode,
       onDuplicateNode,
       onReorderNode,
+      onQuickColor,
+      onQuickClearColor,
+      onQuickToggleIcon,
+      onQuickClearIcons,
+      onToggleQuickPalette,
+      isQuickPaletteOpen,
+      onCloseQuickPalette,
       onUndo,
       onRedo,
       setSelectedNodeId,
@@ -578,6 +667,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             .filter(lNode => !isPresentationActive || visibleNodeIds?.has(lNode.id))
             .map((lNode: LayoutNode) => {
               const isSelected = selectedNodeId === lNode.id;
+              const isMultiSelected = !isSelected && selectedNodeIds.includes(lNode.id);
               const isSearchMatch = searchMatchedIds.includes(lNode.id);
               const isEditing = editingNodeId === lNode.id;
               const isPresentationActiveNode =
@@ -594,9 +684,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               const hasChildren = node.children.length > 0;
               const isBubble = node.style === 'bubble' || isRoot;
 
-              // Explicit node overrides (defaults handled by CSS for Light/Dark theme support)
-              const explicitColor = node.color;
-              const explicitBgColor = node.backgroundColor;
+              // Explicit node overrides with dark-mode high-contrast adaptation
+              const resolvedColors = resolveNodeDisplayColors(node, isDarkMode);
+              const borderToken = resolvedColors.borderColor || resolvedColors.color;
               const fontSize = node.font?.size || (isRoot ? 17 : 14);
               const isBold = node.font?.bold || isRoot;
               const isItalic = node.font?.italic || false;
@@ -644,7 +734,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     }
                   }}
                   className={`mindmap-node ${isBubble ? 'style-bubble' : 'style-fork'} ${isSelected ? 'selected' : ''
-                    } ${isSearchMatch ? 'search-match' : ''} ${dragOverNodeId === lNode.id ? 'drag-target' : ''
+                    } ${isMultiSelected ? 'multi-selected' : ''} ${isSearchMatch ? 'search-match' : ''} ${dragOverNodeId === lNode.id ? 'drag-target' : ''
                     } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${isPresentationActiveNode ? 'presentation-active-node' : ''
                     } ${isSpotlightPathNode && !isPresentationActiveNode ? 'presentation-spotlight-path' : ''
                     } ${isDimmedNode ? 'presentation-dimmed' : ''}`}
@@ -653,17 +743,21 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     top: `${lNode.y}px`,
                     minWidth: `${lNode.width}px`,
                     transform: anchorTransform,
-                    color: explicitColor,
-                    backgroundColor: explicitBgColor,
+                    color: resolvedColors.color,
+                    backgroundColor: resolvedColors.backgroundColor,
                     fontSize: `${fontSize}px`,
                     fontWeight: isBold ? 'bold' : 'normal',
                     fontStyle: isItalic ? 'italic' : 'normal',
-                    border: isBubble ? (explicitColor ? `1.5px solid ${explicitColor}` : undefined) : 'none',
-                    borderBottom: !isBubble && explicitColor ? `2.5px solid ${explicitColor}` : undefined,
+                    border: isBubble ? (borderToken ? `1.5px solid ${borderToken}` : undefined) : 'none',
+                    borderBottom: !isBubble && borderToken ? `2.5px solid ${borderToken}` : undefined,
                   }}
                   onClick={e => {
                     e.stopPropagation();
-                    setSelectedNodeId(lNode.id);
+                    if ((e.ctrlKey || e.metaKey) && onToggleNodeSelection) {
+                      onToggleNodeSelection(lNode.id);
+                    } else {
+                      setSelectedNodeId(lNode.id);
+                    }
                   }}
                   onDoubleClick={e => {
                     e.stopPropagation();
@@ -796,6 +890,27 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     </button>
                   )}
 
+                  {/* Compact Attribute Tags */}
+                  {node.attributes.length > 0 && (
+                    <span
+                      className="node-attr-tags"
+                      title={node.attributes.map(a => `${a.name}: ${a.value}`).join('\n')}
+                    >
+                      {node.attributes.slice(0, 3).map((attr, idx) => (
+                        <span
+                          key={`${attr.name}-${idx}`}
+                          className={`node-attr-tag tone-${getAttributeTone(attr.name, attr.value)}`}
+                        >
+                          <span className="node-attr-name">{attr.name}:</span>
+                          <span className="node-attr-val">{attr.value}</span>
+                        </span>
+                      ))}
+                      {node.attributes.length > 3 && (
+                        <span className="node-attr-more">+{node.attributes.length - 3}</span>
+                      )}
+                    </span>
+                  )}
+
                   {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
                   {hasChildren && (!isRoot || node.folded) && (
                     <button
@@ -819,7 +934,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         </div>
       </div>
 
-      {/* Minimap & Fit-to-Screen Overlay */}
+      {/* Quick Style Floating Palette */}
+      {!isPresentationActive && quickPaletteOverlay}
+
+      {/* Minimap & Zoom Overlay */}
       {!isPresentationActive && (
         <div
           className={`minimap-container ${isMinimapCollapsed ? 'collapsed' : ''}`}
@@ -832,16 +950,6 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               <span>全体マップ</span>
             </span>
             <div className="minimap-actions">
-              {onFitToScreen && (
-                <button
-                  type="button"
-                  className="minimap-action-btn"
-                  title="全体を表示に合わせる (Ctrl+0)"
-                  onClick={onFitToScreen}
-                >
-                  <Maximize2 size={12} />
-                </button>
-              )}
               <button
                 type="button"
                 className="minimap-action-btn"
@@ -927,6 +1035,64 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 strokeWidth={Math.max(3, mmVbW / 90)}
               />
             </svg>
+          )}
+
+          {(onZoomOut || onZoomIn || onResetZoom || onFitToScreen) && (
+            <div className="minimap-zoom-bar">
+              {onZoomOut && (
+                <button
+                  type="button"
+                  className="minimap-action-btn"
+                  title="ズームアウト"
+                  aria-label="ズームアウト"
+                  onClick={onZoomOut}
+                >
+                  <ZoomOut size={13} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="minimap-zoom-percent"
+                title="表示を 100% / 中央にリセット"
+                onClick={onResetZoom}
+              >
+                {Math.round(zoomScale * 100)}%
+              </button>
+              {onZoomIn && (
+                <button
+                  type="button"
+                  className="minimap-action-btn"
+                  title="ズームイン"
+                  aria-label="ズームイン"
+                  onClick={onZoomIn}
+                >
+                  <ZoomIn size={13} />
+                </button>
+              )}
+              {(onResetZoom || onFitToScreen) && <span className="minimap-zoom-divider" />}
+              {onResetZoom && (
+                <button
+                  type="button"
+                  className="minimap-action-btn"
+                  title="表示リセット (100% / 中央)"
+                  aria-label="表示リセット"
+                  onClick={onResetZoom}
+                >
+                  <RotateCcw size={12} />
+                </button>
+              )}
+              {onFitToScreen && (
+                <button
+                  type="button"
+                  className="minimap-action-btn"
+                  title="マップ全体を表示に合わせる (Ctrl+0)"
+                  aria-label="マップ全体を表示に合わせる"
+                  onClick={onFitToScreen}
+                >
+                  <Maximize2 size={12} />
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

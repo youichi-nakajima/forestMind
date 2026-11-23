@@ -3,13 +3,8 @@ import {
   FolderOpen,
   Download,
   Plus,
-  CornerDownRight,
-  Trash2,
   Undo2,
   Redo2,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   Sparkles,
   Search,
   ChevronUp,
@@ -23,32 +18,20 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  Copy,
-  CopyPlus,
-  Maximize2,
   Image as ImageIcon,
+  Palette,
 } from 'lucide-react';
 
 interface ToolbarProps {
   isForestViewOpen?: boolean;
   onCloseForestView?: () => void;
   onNewTab?: () => void;
-  onAddChild: () => void;
-  onAddSibling: () => void;
-  onDelete: () => void;
-  onCopyNode?: () => void;
-  onDuplicateNode?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  onFitToScreen?: () => void;
-  zoomPercent: number;
   onImportXml: (xml: string) => void;
   onImportMarkdown: (md: string) => void;
   onOpenFileDialog?: () => void;
@@ -61,10 +44,9 @@ interface ToolbarProps {
   onUnfoldAll: () => void;
   onFoldAll: () => void;
   onOpenHelp: () => void;
+  onOpenAbout?: () => void;
   onOpenSearcher: () => void;
   onResetToDefault: () => void;
-  selectedNodeId: string | null;
-  isRootSelected: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   searchResultCount: number;
@@ -73,28 +55,20 @@ interface ToolbarProps {
   onPrevSearch: () => void;
   isPresentationActive?: boolean;
   onTogglePresentation?: () => void;
+  isQuickPaletteOpen?: boolean;
+  onToggleQuickPalette?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   isForestViewOpen = false,
   onCloseForestView,
   onNewTab,
-  onAddChild,
-  onAddSibling,
-  onDelete,
-  onCopyNode,
-  onDuplicateNode,
   isDarkMode = false,
   onToggleTheme,
   onUndo,
   onRedo,
   canUndo,
   canRedo,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
-  onFitToScreen,
-  zoomPercent,
   onImportXml,
   onImportMarkdown,
   onOpenFileDialog,
@@ -107,10 +81,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUnfoldAll,
   onFoldAll,
   onOpenHelp,
+  onOpenAbout,
   onOpenSearcher,
   onResetToDefault,
-  selectedNodeId,
-  isRootSelected,
   searchQuery,
   onSearchChange,
   searchResultCount,
@@ -119,6 +92,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onPrevSearch,
   isPresentationActive = false,
   onTogglePresentation,
+  isQuickPaletteOpen = false,
+  onToggleQuickPalette,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -144,17 +119,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     e.target.value = '';
   };
 
+  const renderBrandButton = (badgeLabel?: string, isForestBadge = false) => (
+    <button
+      type="button"
+      className="toolbar-section app-brand app-brand-btn"
+      title="forestMind について"
+      aria-label="forestMind について"
+      onClick={onOpenAbout}
+    >
+      <span className="brand-icon">🌲</span>
+      <span className="brand-title">forestMind</span>
+      {badgeLabel && (
+        <span className={`brand-badge${isForestBadge ? ' forest-badge' : ''}`}>{badgeLabel}</span>
+      )}
+    </button>
+  );
+
   // =========================================================================
   // Mode A: Forest Overview Toolbar (森林ビュー専用ツールバー)
   // =========================================================================
   if (isForestViewOpen) {
     return (
       <header className="toolbar forest-toolbar">
-        <div className="toolbar-section app-brand">
-          <span className="brand-icon">🌲</span>
-          <span className="brand-title">forestMind</span>
-          <span className="brand-badge forest-badge">森林ビュー</span>
-        </div>
+        {renderBrandButton('森林ビュー', true)}
 
         <div className="toolbar-divider" />
 
@@ -231,11 +218,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   // =========================================================================
   return (
     <header className="toolbar">
-      <div className="toolbar-section app-brand">
-        <span className="brand-icon">🌲</span>
-        <span className="brand-title">forestMind</span>
-        <span className="brand-badge">FreeMind 互換</span>
-      </div>
+      {renderBrandButton()}
 
       <div className="toolbar-divider" />
 
@@ -316,59 +299,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="toolbar-divider" />
 
-      {/* Node Operations */}
-      <div className="toolbar-group">
-        <button
-          className="toolbar-btn"
-          title="子ノードを追加 (Tab / Insert)"
-          disabled={!selectedNodeId}
-          onClick={onAddChild}
-        >
-          <CornerDownRight size={16} />
-          <span>子 (Tab)</span>
-        </button>
-        <button
-          className="toolbar-btn"
-          title="兄弟ノードを追加 (Enter)"
-          disabled={!selectedNodeId || isRootSelected}
-          onClick={onAddSibling}
-        >
-          <Plus size={16} />
-          <span>兄弟 (Enter)</span>
-        </button>
-        <button
-          className="toolbar-btn danger"
-          title="選択したノードを削除 (Delete / Backspace)"
-          disabled={!selectedNodeId || isRootSelected}
-          onClick={onDelete}
-        >
-          <Trash2 size={16} />
-          <span>削除</span>
-        </button>
-        {onCopyNode && (
-          <button
-            className="toolbar-btn icon-only"
-            title="ノードをコピー (Ctrl+C)"
-            disabled={!selectedNodeId}
-            onClick={onCopyNode}
-          >
-            <Copy size={15} />
-          </button>
-        )}
-        {onDuplicateNode && (
-          <button
-            className="toolbar-btn icon-only"
-            title="ノードを複製 (Ctrl+D)"
-            disabled={!selectedNodeId || isRootSelected}
-            onClick={onDuplicateNode}
-          >
-            <CopyPlus size={15} />
-          </button>
-        )}
-      </div>
-
-      <div className="toolbar-divider" />
-
       {/* Fold / Unfold All */}
       <div className="toolbar-group">
         <button
@@ -410,6 +340,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       <div className="toolbar-divider" />
+
+      {/* Quick Style Palette Toggle */}
+      {onToggleQuickPalette && (
+        <>
+          <div className="toolbar-group">
+            <button
+              className={`toolbar-btn quick-palette-btn ${
+                isQuickPaletteOpen ? 'active' : ''
+              }`}
+              title="クイック色分け・アイコン・タグ (Q / Ctrl+K)"
+              onClick={onToggleQuickPalette}
+            >
+              <Palette size={15} />
+              <span>クイック装飾</span>
+            </button>
+          </div>
+          <div className="toolbar-divider" />
+        </>
+      )}
 
       {/* Presentation Playback (Mindmap Growth Animation) */}
       {onTogglePresentation && (
@@ -486,31 +435,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </button>
 
       <div className="toolbar-spacer" />
-
-      {/* Zoom Controls */}
-      <div className="toolbar-group">
-        <button className="toolbar-btn icon-only" title="ズームアウト" onClick={onZoomOut}>
-          <ZoomOut size={16} />
-        </button>
-        <span className="zoom-text">{Math.round(zoomPercent)}%</span>
-        <button className="toolbar-btn icon-only" title="ズームイン" onClick={onZoomIn}>
-          <ZoomIn size={16} />
-        </button>
-        <button className="toolbar-btn icon-only" title="表示リセット (100% / 中央)" onClick={onResetZoom}>
-          <RotateCcw size={16} />
-        </button>
-        {onFitToScreen && (
-          <button
-            className="toolbar-btn icon-only"
-            title="マップ全体を表示に合わせる (Ctrl+0)"
-            onClick={onFitToScreen}
-          >
-            <Maximize2 size={15} />
-          </button>
-        )}
-      </div>
-
-      <div className="toolbar-divider" />
 
       {/* Help & Sample Reset */}
       <div className="toolbar-group">

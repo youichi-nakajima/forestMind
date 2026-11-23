@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FreeMindNode, NodeStyle, FreeMindMap } from '../types/freemind';
 import { CLOUD_PALETTE } from '../utils/layout';
 import { noteHtmlToPlainText, plainTextToNoteHtml } from '../utils/noteRenderer';
+import { NODE_ICONS } from '../utils/quickStyle';
 import {
   Palette,
   Type,
@@ -23,21 +24,6 @@ interface NodePropertiesPanelProps {
   onUpdate: (patch: Partial<FreeMindNode>) => void;
   onClose: () => void;
 }
-
-const AVAILABLE_ICONS = [
-  { id: 'button_ok', emoji: '✅', label: 'OK' },
-  { id: 'button_cancel', emoji: '❌', label: 'Cancel' },
-  { id: 'flag', emoji: '🚩', label: 'Flag' },
-  { id: 'star', emoji: '⭐', label: 'Star' },
-  { id: 'idea', emoji: '💡', label: 'Idea' },
-  { id: 'launch', emoji: '🚀', label: 'Launch' },
-  { id: 'pencil', emoji: '✏️', label: 'Edit' },
-  { id: 'clanbomber', emoji: '🌲', label: 'Forest' },
-  { id: 'folder', emoji: '📁', label: 'Folder' },
-  { id: 'help', emoji: '❓', label: 'Question' },
-  { id: 'bookmark', emoji: '🔖', label: 'Bookmark' },
-  { id: 'attach', emoji: '📎', label: 'Attach' },
-];
 
 export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
   node,
@@ -383,16 +369,18 @@ export const NodePropertiesPanel: React.FC<NodePropertiesPanelProps> = ({
             <span>アイコン</span>
           </label>
           <div className="icons-palette">
-            {AVAILABLE_ICONS.map(ic => {
-              const active = node.icons.some(i => i.builtin === ic.id);
+            {NODE_ICONS.map(ic => {
+              const active = node.icons.some(i => i.builtin === ic.builtin);
               return (
                 <button
-                  key={ic.id}
+                  key={ic.builtin}
+                  type="button"
                   className={`icon-palette-btn ${active ? 'active' : ''}`}
-                  title={ic.label}
-                  onClick={() => handleToggleIcon(ic.id)}
+                  title={`${ic.label}${ic.key ? ` (Alt+${ic.key})` : ''}`}
+                  onClick={() => handleToggleIcon(ic.builtin)}
                 >
                   <span>{ic.emoji}</span>
+                  {ic.key && <span className="icon-palette-key">{ic.key}</span>}
                 </button>
               );
             })}

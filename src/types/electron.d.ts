@@ -33,8 +33,18 @@ export interface ElectronPickLinkResult {
   linkValue: string;
 }
 
+export interface ElectronAppInfo {
+  version: string;
+  electron: string;
+  chrome: string;
+  node: string;
+  platform: string;
+  arch: string;
+}
+
 export interface ElectronAPI {
   isElectron: boolean;
+  getAppInfo?: () => Promise<ElectronAppInfo>;
   getInitialFile: () => Promise<ElectronFilePayload | null>;
   onOpenFile: (callback: (payload: ElectronFilePayload) => void) => () => void;
   openMmFile: () => Promise<ElectronFilePayload | null>;

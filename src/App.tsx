@@ -8,12 +8,24 @@ import { NodePropertiesPanel } from './components/NodePropertiesPanel';
 import { PresentationControls } from './components/PresentationControls';
 import { ForestOverview } from './components/ForestOverview';
 import { HelpModal } from './components/HelpModal';
+import { AboutModal } from './components/AboutModal';
+import { QuickStylePalette } from './components/QuickStylePalette';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
 import { resumeAudioContext } from './utils/audio';
 import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
 import { persistTabsToStorage, prepareTabsForAppClose } from './utils/tabStorage';
+import {
+  applyQuickColorToNodes,
+  clearColorOnNodes,
+  clearIconsOnNodes,
+  QUICK_COLOR_PRESETS,
+  QUICK_ICON_PRESETS,
+  toggleAttributeOnNodes,
+  toggleIconOnNodes,
+  type QuickColorPreset,
+} from './utils/quickStyle';
 
 export const App: React.FC = () => {
   const {
@@ -45,6 +57,7 @@ export const App: React.FC = () => {
     unfoldAll,
     foldAll,
     updateNodeProperties,
+    batchUpdateNodes,
     moveNode,
     copyNode,
     cutNode,
@@ -76,7 +89,10 @@ export const App: React.FC = () => {
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(true);
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
+  const [extraSelectedNodeIds, setExtraSelectedNodeIds] = useState<string[]>([]);
+  const [isQuickPaletteOpen, setIsQuickPaletteOpen] = useState(false);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -240,6 +256,8 @@ export const App: React.FC = () => {
       handleStopPresentation();
     } else {
       setIsForestViewOpen(false);
+      setIsQuickPaletteOpen(false);
+      setExtraSelectedNodeIds([]);
       startPresentation();
     }
   }, [isPresentationActive, handleStopPresentation, startPresentation]);
@@ -261,6 +279,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (prevActiveTabIdRef.current !== activeTabId) {
       prevActiveTabIdRef.current = activeTabId;
+      setExtraSelectedNodeIds([]);
+      setIsQuickPaletteOpen(false);
       stopPresentation();
     }
   }, [activeTabId, stopPresentation]);
@@ -268,16 +288,136 @@ export const App: React.FC = () => {
   // Handler for jumping from FreeMindSearcher to map & node
   const handleOpenSearcherNode = (targetMap: FreeMindMap, title: string, nodeId: string) => {
     openMapAndSelectNode(targetMap, title, nodeId);
+    setExtraSelectedNodeIds([]);
     setIsForestViewOpen(false);
   };
+
+  // Multi-selection & quick styling helpers (Issue #9)
+  const handleSelectSingleNode = useCallback(
+    (id: string | null) => {
+      setExtraSelectedNodeIds([]);
+      setSelectedNodeId(id);
+    },
+    [setSelectedNodeId]
+  );
+
+  const handleToggleNodeSelection = useCallback(
+    (nodeId: string) => {
+      if (!selectedNodeId) {
+        setSelectedNodeId(nodeId);
+        setExtraSelectedNodeIds([]);
+        return;
+      }
+      if (nodeId === selectedNodeId) {
+        if (extraSelectedNodeIds.length > 0) {
+          const [nextPrimary, ...rest] = extraSelectedNodeIds;
+          setSelectedNodeId(nextPrimary);
+          setExtraSelectedNodeIds(rest);
+        }
+        return;
+      }
+      setExtraSelectedNodeIds(prev =>
+        prev.includes(nodeId) ? prev.filter(id => id !== nodeId) : [...prev, nodeId]
+      );
+    },
+    [selectedNodeId, extraSelectedNodeIds, setSelectedNodeId]
+  );
+
+  const effectiveSelectedNodeIds = useMemo(() => {
+    if (!selectedNodeId) return [];
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    if (findNodeInTree(map.root, selectedNodeId)) {
+      ids.push(selectedNodeId);
+      seen.add(selectedNodeId);
+    }
+    for (const id of extraSelectedNodeIds) {
+      if (!seen.has(id) && findNodeInTree(map.root, id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+    return ids;
+  }, [map.root, selectedNodeId, extraSelectedNodeIds]);
+
+  const selectedNodes = useMemo(
+    () =>
+      effectiveSelectedNodeIds
+        .map(id => findNodeInTree(map.root, id))
+        .filter((n): n is FreeMindNode => n !== null),
+    [map.root, effectiveSelectedNodeIds]
+  );
+
+  const handleQuickColorPreset = useCallback(
+    (preset: QuickColorPreset) => {
+      if (effectiveSelectedNodeIds.length === 0) return;
+      const changed = batchUpdateNodes(effectiveSelectedNodeIds, nodes =>
+        applyQuickColorToNodes(nodes, preset)
+      );
+      if (changed) {
+        showToast(`🎨 配色「${preset.label}」を切り替えました`);
+      }
+    },
+    [effectiveSelectedNodeIds, batchUpdateNodes, showToast]
+  );
+
+  const handleQuickColorKey = useCallback(
+    (key: string) => {
+      const preset = QUICK_COLOR_PRESETS.find(p => p.key === key);
+      if (preset) {
+        handleQuickColorPreset(preset);
+      }
+    },
+    [handleQuickColorPreset]
+  );
+
+  const handleQuickClearColor = useCallback(() => {
+    if (effectiveSelectedNodeIds.length === 0) return;
+    if (batchUpdateNodes(effectiveSelectedNodeIds, clearColorOnNodes)) {
+      showToast('🎨 配色をクリアしました');
+    }
+  }, [effectiveSelectedNodeIds, batchUpdateNodes, showToast]);
+
+  const handleQuickToggleIcon = useCallback(
+    (builtin: string) => {
+      if (effectiveSelectedNodeIds.length === 0) return;
+      batchUpdateNodes(effectiveSelectedNodeIds, nodes => toggleIconOnNodes(nodes, builtin));
+    },
+    [effectiveSelectedNodeIds, batchUpdateNodes]
+  );
+
+  const handleQuickToggleIconKey = useCallback(
+    (key: string) => {
+      const preset = QUICK_ICON_PRESETS.find(p => p.key === key);
+      if (preset) {
+        handleQuickToggleIcon(preset.builtin);
+      }
+    },
+    [handleQuickToggleIcon]
+  );
+
+  const handleQuickClearIcons = useCallback(() => {
+    if (effectiveSelectedNodeIds.length === 0) return;
+    if (batchUpdateNodes(effectiveSelectedNodeIds, clearIconsOnNodes)) {
+      showToast('アイコンをクリアしました');
+    }
+  }, [effectiveSelectedNodeIds, batchUpdateNodes, showToast]);
+
+  const handleQuickToggleAttribute = useCallback(
+    (name: string, value: string) => {
+      if (effectiveSelectedNodeIds.length === 0) return;
+      batchUpdateNodes(effectiveSelectedNodeIds, nodes =>
+        toggleAttributeOnNodes(nodes, name, value)
+      );
+    },
+    [effectiveSelectedNodeIds, batchUpdateNodes]
+  );
 
   // Find currently selected node object
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return findNodeInTree(map.root, selectedNodeId);
   }, [map.root, selectedNodeId]);
-
-  const isRootSelected = selectedNodeId === map.root.id;
 
   // Zoom controls
   const handleZoomIn = () => setZoomScale(z => Math.min(z * 1.2, 3.0));
@@ -624,22 +764,12 @@ export const App: React.FC = () => {
           createNewTab();
           setIsForestViewOpen(false);
         }}
-        onAddChild={() => selectedNodeId && addChildNode(selectedNodeId)}
-        onAddSibling={() => selectedNodeId && addSiblingNode(selectedNodeId)}
-        onDelete={() => selectedNodeId && deleteNode(selectedNodeId)}
-        onCopyNode={handleCopy}
-        onDuplicateNode={handleDuplicate}
         isDarkMode={isDarkMode}
         onToggleTheme={toggleDarkMode}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onResetZoom={handleResetZoom}
-        onFitToScreen={handleFitToScreen}
-        zoomPercent={zoomScale * 100}
         onImportXml={loadMapFromXml}
         onImportMarkdown={importMarkdown}
         onOpenFileDialog={window.electronAPI ? handleOpenFileDialog : undefined}
@@ -652,10 +782,9 @@ export const App: React.FC = () => {
         onUnfoldAll={unfoldAll}
         onFoldAll={foldAll}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
         onOpenSearcher={() => setIsSearcherOpen(true)}
         onResetToDefault={resetToDefault}
-        selectedNodeId={selectedNodeId}
-        isRootSelected={isRootSelected}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchResultCount={searchResults.length}
@@ -664,6 +793,8 @@ export const App: React.FC = () => {
         onPrevSearch={handlePrevSearch}
         isPresentationActive={isPresentationActive}
         onTogglePresentation={handleTogglePresentation}
+        isQuickPaletteOpen={isQuickPaletteOpen}
+        onToggleQuickPalette={() => setIsQuickPaletteOpen(prev => !prev)}
       />
 
       {/* Multi-Map Tab Bar (forestMind Forest View feature) */}
@@ -709,12 +840,20 @@ export const App: React.FC = () => {
             <MindMapCanvas
               map={map}
               selectedNodeId={selectedNodeId}
+              selectedNodeIds={effectiveSelectedNodeIds}
               setSelectedNodeId={id => {
-                setSelectedNodeId(id);
+                handleSelectSingleNode(id);
                 if (id && !isPropertiesOpen && !isPresentationActive) {
                   setIsPropertiesOpen(true);
                 }
               }}
+              onToggleNodeSelection={nodeId => {
+                handleToggleNodeSelection(nodeId);
+                if (!isPropertiesOpen && !isPresentationActive) {
+                  setIsPropertiesOpen(true);
+                }
+              }}
+              isDarkMode={isDarkMode}
               editingNodeId={editingNodeId}
               setEditingNodeId={setEditingNodeId}
               onCancelEditing={cancelEditing}
@@ -739,6 +878,9 @@ export const App: React.FC = () => {
               setZoomScale={setZoomScale}
               panOffset={panOffset}
               setPanOffset={setPanOffset}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onResetZoom={handleResetZoom}
               onFitToScreen={handleFitToScreen}
               searchMatchedIds={searchResults}
               onNavigateTab={targetTabId => {
@@ -753,6 +895,26 @@ export const App: React.FC = () => {
               autoCenter={autoCenter}
               isSpotlightEnabled={isSpotlightEnabled}
               spotlightNodeIds={spotlightNodeIds}
+              onQuickColor={handleQuickColorKey}
+              onQuickClearColor={handleQuickClearColor}
+              onQuickToggleIcon={handleQuickToggleIconKey}
+              onQuickClearIcons={handleQuickClearIcons}
+              onToggleQuickPalette={() => setIsQuickPaletteOpen(prev => !prev)}
+              isQuickPaletteOpen={isQuickPaletteOpen}
+              onCloseQuickPalette={() => setIsQuickPaletteOpen(false)}
+              quickPaletteOverlay={
+                <QuickStylePalette
+                  isOpen={isQuickPaletteOpen}
+                  selectedNodes={selectedNodes}
+                  isDarkMode={isDarkMode}
+                  onSelectColor={handleQuickColorPreset}
+                  onClearColor={handleQuickClearColor}
+                  onToggleIcon={handleQuickToggleIcon}
+                  onClearIcons={handleQuickClearIcons}
+                  onToggleAttribute={handleQuickToggleAttribute}
+                  onClose={() => setIsQuickPaletteOpen(false)}
+                />
+              }
             />
 
             {/* Presentation Floating Controls */}
@@ -817,6 +979,13 @@ export const App: React.FC = () => {
 
       {/* Help Modal */}
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      {/* About Modal */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        onOpenHelp={() => setIsHelpOpen(true)}
+      />
 
       {/* FreeMindSearcher Folder Search Modal */}
       <FreeMindSearcherModal

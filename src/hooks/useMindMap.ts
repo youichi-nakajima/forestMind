@@ -702,6 +702,33 @@ export function useMindMap() {
     [activeTabId, updateTree]
   );
 
+  const batchUpdateNodes = useCallback(
+    (nodeIds: string[], mutator: (nodes: FreeMindNode[]) => boolean): boolean => {
+      const uniqueIds = Array.from(new Set(nodeIds.filter(Boolean)));
+      if (uniqueIds.length === 0) return false;
+
+      let applied = false;
+      updateTree(root => {
+        const targets = uniqueIds
+          .map(id => findNode(root, id))
+          .filter((n): n is FreeMindNode => n !== null);
+        if (targets.length === 0) return false;
+
+        const changed = mutator(targets);
+        if (!changed) return false;
+
+        const now = Date.now();
+        for (const target of targets) {
+          target.modified = now;
+        }
+        applied = true;
+        return true;
+      });
+      return applied;
+    },
+    [updateTree]
+  );
+
   const moveNode = useCallback(
     (draggedId: string, targetParentId: string) => {
       if (draggedId === map.root.id) return;
@@ -1252,6 +1279,7 @@ export function useMindMap() {
     unfoldAll,
     foldAll,
     updateNodeProperties,
+    batchUpdateNodes,
     moveNode,
     copyNode,
     cutNode,

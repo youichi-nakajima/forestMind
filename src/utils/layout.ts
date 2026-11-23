@@ -122,6 +122,20 @@ export function estimateNodeDimensions(
   if (node.noteHtml) {
     textWidth += 20;
   }
+  // Extra width for compact inline attribute tags (max 3 tags + overflow badge)
+  if (node.attributes && node.attributes.length > 0) {
+    const visibleCount = Math.min(3, node.attributes.length);
+    let tagsWidth = 6;
+    for (let i = 0; i < visibleCount; i++) {
+      const attr = node.attributes[i];
+      const charCount = Math.min(`${attr.name}:${attr.value}`.length, 16);
+      tagsWidth += Math.round(charCount * 8.5) + 14;
+    }
+    if (node.attributes.length > 3) {
+      tagsWidth += 26;
+    }
+    textWidth += tagsWidth;
+  }
 
   // Horizontal padding based on node style (+ safety buffer so text never wraps)
   const isBubble = node.style === 'bubble' || isRoot;

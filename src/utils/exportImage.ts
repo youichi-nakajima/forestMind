@@ -1,5 +1,6 @@
 import { FreeMindNode } from '../types/freemind';
 import { computeLayout, LayoutNode, RenderCloud } from './layout';
+import { resolveNodeDisplayColors } from './quickStyle';
 
 export interface MapBounds {
   minX: number;
@@ -150,23 +151,24 @@ export function buildMindMapSvg(
 
     const left = lNode.x - lNode.width / 2;
     const top = lNode.y - lNode.height / 2;
+    const resolved = resolveNodeDisplayColors(node, isDarkMode);
 
     if (isBubble) {
-      const fill = node.backgroundColor || (isRoot ? rootFill : defaultBubbleFill);
-      const stroke = node.color || (isRoot ? rootStroke : defaultBubbleStroke);
+      const fill = resolved.backgroundColor || (isRoot ? rootFill : defaultBubbleFill);
+      const stroke = resolved.borderColor || resolved.color || (isRoot ? rootStroke : defaultBubbleStroke);
       const rx = isRoot ? 16 : 10;
       const strokeWidth = isRoot ? 2 : 1.5;
       parts.push(
         `<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${lNode.width.toFixed(1)}" height="${lNode.height.toFixed(1)}" rx="${rx}" fill="${escapeXml(fill)}" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}"/>`
       );
     } else {
-      if (node.backgroundColor) {
+      if (resolved.backgroundColor) {
         parts.push(
-          `<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${lNode.width.toFixed(1)}" height="${lNode.height.toFixed(1)}" rx="6" fill="${escapeXml(node.backgroundColor)}"/>`
+          `<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${lNode.width.toFixed(1)}" height="${lNode.height.toFixed(1)}" rx="6" fill="${escapeXml(resolved.backgroundColor)}"/>`
         );
       }
       const lineY = lNode.y + lNode.height / 2 - 1;
-      const lineColor = node.color || forkUnderline;
+      const lineColor = resolved.borderColor || resolved.color || forkUnderline;
       parts.push(
         `<line x1="${left.toFixed(1)}" y1="${lineY.toFixed(1)}" x2="${(left + lNode.width).toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${escapeXml(lineColor)}" stroke-width="2.5" stroke-linecap="round"/>`
       );
@@ -176,8 +178,15 @@ export function buildMindMapSvg(
     const badges: string[] = [];
     if (node.link) badges.push('🔗');
     if (node.noteHtml) badges.push('📝');
-    const label = [iconsStr, node.text || '', badges.join('')].filter(Boolean).join(' ');
-    const textColor = node.color || (isRoot ? rootText : defaultText);
+    const attrsStr =
+      node.attributes.length > 0
+        ? node.attributes
+            .slice(0, 3)
+            .map(a => `[${a.name}:${a.value}]`)
+            .join(' ') + (node.attributes.length > 3 ? ` +${node.attributes.length - 3}` : '')
+        : '';
+    const label = [iconsStr, node.text || '', attrsStr, badges.join('')].filter(Boolean).join(' ');
+    const textColor = resolved.color || (isRoot ? rootText : defaultText);
 
     parts.push(
       `<text x="${lNode.x.toFixed(1)}" y="${lNode.y.toFixed(1)}" fill="${escapeXml(textColor)}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="${fontWeight}" font-style="${fontStyle}" text-anchor="middle" dominant-baseline="central">${escapeXml(label)}</text>`

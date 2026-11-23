@@ -33,6 +33,17 @@ const SHORTCUT_GROUPS = [
     ],
   },
   {
+    category: 'クイック色分け・アイコン・タグ',
+    items: [
+      { key: '1 〜 6', desc: 'クイックカラーを適用 / 解除（トグル）' },
+      { key: '0', desc: '選択ノードの配色をクリア' },
+      { key: 'Alt + 1 〜 9', desc: 'FreeMind 組み込みアイコンをトグル' },
+      { key: 'Alt + 0', desc: '選択ノードのアイコンをすべてクリア' },
+      { key: 'Q / Ctrl + K', desc: 'クイック装飾パレットの表示 / 非表示' },
+      { key: 'Ctrl + クリック', desc: '複数ノードを追加選択 / 選択解除' },
+    ],
+  },
+  {
     category: '履歴 & 検索',
     items: [
       { key: 'Ctrl + Z', desc: '元に戻す (Undo)' },

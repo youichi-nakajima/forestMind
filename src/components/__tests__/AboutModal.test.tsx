@@ -63,7 +63,7 @@ describe('AboutModal', () => {
     await renderModal({ isOpen: true });
 
     expect(container.textContent).toContain('forestMind');
-    expect(container.textContent).toContain('v1.3.0');
+    expect(container.textContent).toContain('v1.4.0');
     expect(container.textContent).toContain('MIT License');
     expect(container.textContent).toContain('Web ブラウザ');
 

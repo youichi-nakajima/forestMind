@@ -4182,3 +4182,488 @@ body {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Node Context Menu (Issue #11)
+   ========================================================================== */
+.node-context-menu {
+  position: fixed;
+  min-width: 236px;
+  max-width: 280px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1050;
+}
+
+.context-menu-header {
+  padding: 5px 8px 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.context-menu-item:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.context-menu-item.danger {
+  color: #dc2626;
+}
+
+.context-menu-item.danger:hover:not(:disabled) {
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+.context-menu-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.context-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.context-menu-shortcut {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-family: inherit;
+  margin-left: 8px;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background-color: #e2e8f0;
+  margin: 3px 4px;
+}
+
+.app-container.theme-dark .node-context-menu {
+  background: rgba(15, 23, 42, 0.97);
+  border-color: #334155;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.58);
+}
+
+.app-container.theme-dark .context-menu-header {
+  color: #94a3b8;
+  border-bottom-color: #1f2937;
+}
+
+.app-container.theme-dark .context-menu-item {
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .context-menu-item:hover:not(:disabled) {
+  background-color: #1e293b;
+  color: #60a5fa;
+}
+
+.app-container.theme-dark .context-menu-item.danger {
+  color: #f87171;
+}
+
+.app-container.theme-dark .context-menu-item.danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.app-container.theme-dark .context-menu-shortcut {
+  color: #64748b;
+}
+
+.app-container.theme-dark .context-menu-divider {
+  background-color: #1f2937;
+}
+
+/* ==========================================================================
+   Map Filter Bar & Spotlight Filter Styles (Issue #13)
+   ========================================================================== */
+.toolbar-btn.filter-trigger-btn {
+  gap: 5px;
+}
+
+.toolbar-btn.filter-trigger-btn.active {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.toolbar-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.map-filter-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 28px));
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 42;
+}
+
+.map-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.map-filter-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.map-filter-icon {
+  color: #2563eb;
+}
+
+.map-filter-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background-color: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.map-filter-count.active {
+  color: #1d4ed8;
+  background-color: #dbeafe;
+}
+
+.map-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-filter-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.map-filter-nav-btn:hover:not(:disabled) {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.map-filter-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.map-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mindmap-node.filter-dimmed {
+  opacity: 0.2 !important;
+  filter: grayscale(45%) contrast(85%);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.mindmap-node.filter-dimmed:hover {
+  opacity: 0.78 !important;
+  filter: none;
+}
+
+.mindmap-node.filter-match {
+  box-shadow: 0 0 0 2.5px #2563eb, 0 4px 12px rgba(37, 99, 235, 0.24);
+}
+
+.mindmap-edge.filter-dimmed-edge {
+  opacity: 0.14 !important;
+  transition: opacity 0.25s ease;
+}
+
+.mindmap-cloud.filter-dimmed-cloud {
+  opacity: 0.08 !important;
+  transition: opacity 0.25s ease;
+}
+
+.mindmap-arrow-link.filter-dimmed-arrow {
+  opacity: 0.1 !important;
+  transition: opacity 0.25s ease;
+}
+
+.filter-hidden-match-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  border-radius: 9999px;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.app-container.theme-dark .toolbar-btn.filter-trigger-btn.active {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: #60a5fa;
+  color: #93c5fd;
+}
+
+.app-container.theme-dark .map-filter-bar {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: #334155;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.app-container.theme-dark .map-filter-header {
+  border-bottom-color: #1f2937;
+}
+
+.app-container.theme-dark .map-filter-title {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .map-filter-count {
+  background-color: #1f2937;
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .map-filter-count.active {
+  background-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+.app-container.theme-dark .map-filter-nav-btn {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .map-filter-nav-btn:hover:not(:disabled) {
+  background-color: #283548;
+  color: #f8fafc;
+}
+
+.app-container.theme-dark .mindmap-node.filter-match {
+  box-shadow: 0 0 0 2.5px #60a5fa, 0 4px 12px rgba(96, 165, 250, 0.28);
+}
+
+/* ==========================================================================
+   Focus Mode (Hoist) Breadcrumb Bar (Issue #14)
+   ========================================================================== */
+.toolbar-btn.focus-trigger-btn.active {
+  background-color: #ecfdf5;
+  border-color: #34d399;
+  color: #047857;
+}
+
+.focus-breadcrumb-bar {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  z-index: 36;
+  flex-wrap: wrap;
+}
+
+.focus-breadcrumb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background-color: #ecfdf5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.focus-breadcrumb-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.focus-crumb-sep {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.focus-crumb-btn {
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-crumb-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.focus-crumb-current {
+  font-size: 12px;
+  font-weight: 700;
+  color: #047857;
+  padding: 2px 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.focus-exit-btn:hover {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.app-container.theme-dark .toolbar-btn.focus-trigger-btn.active {
+  background-color: rgba(16, 185, 129, 0.22);
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .focus-breadcrumb-bar {
+  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.app-container.theme-dark .focus-breadcrumb-badge {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .focus-crumb-btn {
+  color: #cbd5e1;
+}
+
+.app-container.theme-dark .focus-crumb-btn:hover {
+  background-color: #1f2937;
+  color: #f8fafc;
+}
+
+.app-container.theme-dark .focus-crumb-current {
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .focus-exit-btn {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .focus-exit-btn:hover {
+  background-color: rgba(239, 68, 68, 0.22);
+  border-color: #f87171;
+  color: #fecaca;
+}

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { FreeMindMap } from '../types/freemind';
+import { FreeMindMap, FreeMindNode } from '../types/freemind';
 import { computeLayout, LayoutNode, EdgePath } from '../utils/layout';
 import { computeMapBounds } from '../utils/exportImage';
 import { renderNoteForPopover, sanitizeNodeHtml } from '../utils/noteRenderer';
@@ -8,6 +8,9 @@ import {
   getDigitFromKeyboardEvent,
   resolveNodeDisplayColors,
 } from '../utils/quickStyle';
+import { parseForestMindLink } from '../utils/nodeLinks';
+import type { MapFilterResult } from '../utils/mapFilter';
+import { NodeContextMenu } from './NodeContextMenu';
 import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 interface MindMapCanvasProps {
@@ -38,8 +41,9 @@ interface MindMapCanvasProps {
   onResetZoom?: () => void;
   onFitToScreen?: () => void;
   searchMatchedIds?: string[];
-  onNavigateTab?: (tabId: string) => void;
-  onOpenFileLink?: (targetPath: string) => void;
+  onNavigateTab?: (tabId: string, nodeId?: string) => void;
+  onOpenFileLink?: (targetPath: string, nodeId?: string) => void;
+  onSelectLocalNode?: (nodeId: string) => void;
   isPresentationActive?: boolean;
   visibleNodeIds?: Set<string>;
   activeNodeId?: string | null;
@@ -59,6 +63,19 @@ interface MindMapCanvasProps {
   isQuickPaletteOpen?: boolean;
   onCloseQuickPalette?: () => void;
   quickPaletteOverlay?: React.ReactNode;
+  focusedRoot?: FreeMindNode | null;
+  isFocused?: boolean;
+  focusOverlay?: React.ReactNode;
+  filterOverlay?: React.ReactNode;
+  filterResult?: MapFilterResult;
+  isFilterBarOpen?: boolean;
+  onToggleFilterBar?: () => void;
+  onCloseFilterBar?: () => void;
+  onClearFilter?: () => void;
+  onToggleFocusNode?: (nodeId: string) => void;
+  onExitFocus?: () => void;
+  onCopyNodeLink?: (nodeId: string) => void;
+  onOpenPropertiesPanel?: () => void;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
@@ -91,6 +108,19 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   isQuickPaletteOpen = false,
   onCloseQuickPalette,
   quickPaletteOverlay,
+  focusedRoot,
+  isFocused = false,
+  focusOverlay,
+  filterOverlay,
+  filterResult,
+  isFilterBarOpen = false,
+  onToggleFilterBar,
+  onCloseFilterBar,
+  onClearFilter,
+  onToggleFocusNode,
+  onExitFocus,
+  onCopyNodeLink,
+  onOpenPropertiesPanel,
   onUndo,
   onRedo,
   zoomScale,
@@ -104,6 +134,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   searchMatchedIds = [],
   onNavigateTab,
   onOpenFileLink,
+  onSelectLocalNode,
   isPresentationActive = false,
   visibleNodeIds,
   activeNodeId,
@@ -118,6 +149,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
   const [notePopover, setNotePopover] = useState<{ nodeId: string; pinned: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const noteHoverTimerRef = useRef<number | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 1000,
@@ -127,10 +159,21 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const isDraggingMinimapRef = useRef(false);
   const dragViewBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
+  const effectiveRoot = useMemo(() => {
+    const baseRoot = focusedRoot ?? map.root;
+    return baseRoot.folded ? { ...baseRoot, folded: false } : baseRoot;
+  }, [focusedRoot, map.root]);
+
   // Compute layout tree, curved edge paths, arrow links, and clouds
   const { layoutNodes, edges, arrowLinks, clouds } = useMemo(() => {
-    return computeLayout(map.root);
-  }, [map]);
+    return computeLayout(effectiveRoot);
+  }, [effectiveRoot]);
+
+  useEffect(() => {
+    if (isPresentationActive) {
+      setContextMenu(null);
+    }
+  }, [isPresentationActive]);
 
   const mapBounds = useMemo(() => computeMapBounds(layoutNodes, clouds), [layoutNodes, clouds]);
 
@@ -219,6 +262,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       setSelectedNodeId(null);
       setEditingNodeId(null);
       setNotePopover(null);
+      setContextMenu(null);
     }
   };
 
@@ -267,12 +311,36 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       }
 
       if (e.key === 'Escape') {
+        if (contextMenu) {
+          e.preventDefault();
+          setContextMenu(null);
+          return;
+        }
+        if (notePopover) {
+          e.preventDefault();
+          setNotePopover(null);
+          return;
+        }
         if (isQuickPaletteOpen) {
           e.preventDefault();
           onCloseQuickPalette?.();
           return;
         }
-        setNotePopover(prev => (prev ? null : prev));
+        if (isFilterBarOpen) {
+          e.preventDefault();
+          onCloseFilterBar?.();
+          return;
+        }
+        if (filterResult?.isActive) {
+          e.preventDefault();
+          onClearFilter?.();
+          return;
+        }
+        if (isFocused) {
+          e.preventDefault();
+          onExitFocus?.();
+          return;
+        }
       }
 
       // Ignore shortcuts when focus is inside form controls (Properties Panel, Search input, etc.)
@@ -287,6 +355,24 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         return;
       }
 
+      // Toggle Focus Mode (Ctrl+Shift+F) - must be checked before Ctrl+F
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (selectedNodeId) {
+          onToggleFocusNode?.(selectedNodeId);
+        } else if (isFocused) {
+          onExitFocus?.();
+        }
+        return;
+      }
+
+      // Toggle Map Filter Bar (Ctrl+Shift+L)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        onToggleFilterBar?.();
+        return;
+      }
+
       // Toggle Quick Style Palette via Ctrl+K or Q
       if (
         ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') ||
@@ -298,7 +384,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       }
 
       // Focus search input on Ctrl+F
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
         const searchInput = document.querySelector<HTMLInputElement>('.toolbar-search-input');
         if (searchInput) {
           e.preventDefault();
@@ -325,6 +411,26 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       }
 
       if (!selectedNodeId) return;
+
+      // Open node context menu via keyboard (ContextMenu key or Shift+F10)
+      if (
+        e.key === 'ContextMenu' ||
+        (e.shiftKey && e.key === 'F10' && !e.ctrlKey && !e.metaKey && !e.altKey)
+      ) {
+        const lNode = layoutNodes.get(selectedNodeId);
+        if (lNode) {
+          e.preventDefault();
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          const originX = containerRect ? containerRect.left : 0;
+          const originY = containerRect ? containerRect.top : 0;
+          setContextMenu({
+            nodeId: selectedNodeId,
+            x: originX + panOffset.x + lNode.x * zoomScale,
+            y: originY + panOffset.y + lNode.y * zoomScale + 12,
+          });
+          return;
+        }
+      }
 
       // Duplicate node with Ctrl+D
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
@@ -446,7 +552,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         onAddChild(selectedNodeId);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        onAddSibling(selectedNodeId);
+        if (isFocused && selectedNodeId === effectiveRoot.id) {
+          onAddChild(selectedNodeId);
+        } else {
+          onAddSibling(selectedNodeId);
+        }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         onDeleteNode(selectedNodeId);
@@ -478,6 +588,20 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onToggleQuickPalette,
       isQuickPaletteOpen,
       onCloseQuickPalette,
+      contextMenu,
+      notePopover,
+      isFocused,
+      effectiveRoot.id,
+      isFilterBarOpen,
+      filterResult,
+      onToggleFilterBar,
+      onCloseFilterBar,
+      onClearFilter,
+      onToggleFocusNode,
+      onExitFocus,
+      panOffset.x,
+      panOffset.y,
+      zoomScale,
       onUndo,
       onRedo,
       setSelectedNodeId,
@@ -541,6 +665,22 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     [mmVbX, mmVbY, mmVbW, mmVbH, containerSize.width, containerSize.height, zoomScale, setPanOffset]
   );
 
+  const handleLinkClick = (e: React.MouseEvent, rawHref: string) => {
+    const parsed = parseForestMindLink(rawHref);
+    if (parsed.kind === 'forest' && onNavigateTab) {
+      e.preventDefault();
+      onNavigateTab(parsed.tabId, parsed.nodeId);
+    } else if (parsed.kind === 'file' && onOpenFileLink) {
+      e.preventDefault();
+      onOpenFileLink(parsed.filePath, parsed.nodeId);
+    } else if (parsed.kind === 'localNode' && onSelectLocalNode) {
+      e.preventDefault();
+      onSelectLocalNode(parsed.nodeId);
+    }
+  };
+
+  const isFilterActive = !isPresentationActive && Boolean(filterResult?.isActive);
+
   return (
     <div
       ref={containerRef}
@@ -580,19 +720,23 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             .map(c => {
               const isDimmedCloud =
                 isPresentationActive && isSpotlightEnabled && spotlightNodeIds && !spotlightNodeIds.has(c.id);
+              const isFilterDimmedCloud =
+                isFilterActive && !filterResult!.highlightPathIdSet.has(c.id);
               return (
                 <path
                   key={c.id}
                   d={c.d}
                   fill={c.color}
-                  fillOpacity={isDimmedCloud ? 0.12 : 0.55}
+                  fillOpacity={isDimmedCloud || isFilterDimmedCloud ? 0.12 : 0.55}
                   stroke={c.strokeColor}
-                  strokeOpacity={isDimmedCloud ? 0.2 : 0.85}
+                  strokeOpacity={isDimmedCloud || isFilterDimmedCloud ? 0.2 : 0.85}
                   strokeWidth={c.nestingLevel > 0 ? 2.2 : 2}
                   strokeLinejoin="round"
                   strokeLinecap="round"
                   className={`mindmap-cloud ${c.nestingLevel > 0 ? `mindmap-cloud-nested level-${c.nestingLevel}` : ''
-                    } ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''}`}
+                    } ${isDimmedCloud ? 'presentation-dimmed-cloud' : ''} ${
+                      isFilterDimmedCloud ? 'filter-dimmed-cloud' : ''
+                    }`}
                 />
               );
             })}
@@ -613,6 +757,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 spotlightNodeIds.has(edge.targetId);
               const isDimmedEdge =
                 isPresentationActive && isSpotlightEnabled && !isSpotlightEdge;
+              const isFilterEdgeHighlight =
+                isFilterActive &&
+                filterResult!.highlightPathIdSet.has(edge.sourceId) &&
+                filterResult!.highlightPathIdSet.has(edge.targetId);
+              const isFilterDimmedEdge = isFilterActive && !isFilterEdgeHighlight;
 
               return (
                 <path
@@ -623,7 +772,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   strokeWidth={isSpotlightEdge ? Math.max(edge.width + 1.8, 3.5) : edge.width}
                   strokeLinecap="round"
                   className={`mindmap-edge ${isSpotlightEdge ? 'presentation-spotlight-edge' : ''
-                    } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''}`}
+                    } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''} ${
+                      isFilterDimmedEdge ? 'filter-dimmed-edge' : ''
+                    }`}
                 />
               );
             })}
@@ -644,6 +795,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 spotlightNodeIds.has(al.targetId);
               const isDimmedArrow =
                 isPresentationActive && isSpotlightEnabled && !isSpotlightArrow;
+              const isFilterArrowHighlight =
+                isFilterActive &&
+                filterResult!.highlightPathIdSet.has(al.sourceId) &&
+                filterResult!.highlightPathIdSet.has(al.targetId);
+              const isFilterDimmedArrow = isFilterActive && !isFilterArrowHighlight;
 
               return (
                 <path
@@ -655,7 +811,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   fill="none"
                   markerEnd="url(#arrow)"
                   className={`mindmap-arrow-link ${isSpotlightArrow ? 'presentation-spotlight-arrow' : ''
-                    } ${isDimmedArrow ? 'presentation-dimmed-arrow' : ''}`}
+                    } ${isDimmedArrow ? 'presentation-dimmed-arrow' : ''} ${
+                      isFilterDimmedArrow ? 'filter-dimmed-arrow' : ''
+                    }`}
                 />
               );
             })}
@@ -679,16 +837,27 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 spotlightNodeIds.has(lNode.id);
               const isDimmedNode =
                 isPresentationActive && isSpotlightEnabled && !isSpotlightPathNode;
+              const isFilterMatch =
+                isFilterActive && filterResult!.matchedNodeIdSet.has(lNode.id);
+              const isFilterPath =
+                isFilterActive &&
+                !isFilterMatch &&
+                filterResult!.highlightPathIdSet.has(lNode.id);
+              const isFilterDimmed =
+                isFilterActive && !filterResult!.highlightPathIdSet.has(lNode.id);
+              const hiddenMatchCount = isFilterActive
+                ? (filterResult!.hiddenMatchCounts.get(lNode.id) ?? 0)
+                : 0;
               const node = lNode.node;
-              const isRoot = lNode.side === 'root';
+              const isDisplayRoot = lNode.side === 'root';
               const hasChildren = node.children.length > 0;
-              const isBubble = node.style === 'bubble' || isRoot;
+              const isBubble = node.style === 'bubble' || isDisplayRoot;
 
               // Explicit node overrides with dark-mode high-contrast adaptation
               const resolvedColors = resolveNodeDisplayColors(node, isDarkMode);
               const borderToken = resolvedColors.borderColor || resolvedColors.color;
-              const fontSize = node.font?.size || (isRoot ? 17 : 14);
-              const isBold = node.font?.bold || isRoot;
+              const fontSize = node.font?.size || (isDisplayRoot ? 17 : 14);
+              const isBold = node.font?.bold || isDisplayRoot;
               const isItalic = node.font?.italic || false;
 
               // Anchor inner edge to exact connection point so text/underline never overlaps incoming edge
@@ -708,7 +877,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               return (
                 <div
                   key={lNode.id}
-                  draggable={!isRoot && !isEditing}
+                  draggable={!isDisplayRoot && !isEditing}
                   onDragStart={e => {
                     e.dataTransfer.setData('text/plain', lNode.id);
                     e.dataTransfer.effectAllowed = 'move';
@@ -735,9 +904,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   }}
                   className={`mindmap-node ${isBubble ? 'style-bubble' : 'style-fork'} ${isSelected ? 'selected' : ''
                     } ${isMultiSelected ? 'multi-selected' : ''} ${isSearchMatch ? 'search-match' : ''} ${dragOverNodeId === lNode.id ? 'drag-target' : ''
-                    } ${isRoot ? 'root-node' : ''} side-${lNode.side} ${isPresentationActiveNode ? 'presentation-active-node' : ''
+                    } ${isDisplayRoot ? 'root-node' : ''} side-${lNode.side} ${isPresentationActiveNode ? 'presentation-active-node' : ''
                     } ${isSpotlightPathNode && !isPresentationActiveNode ? 'presentation-spotlight-path' : ''
-                    } ${isDimmedNode ? 'presentation-dimmed' : ''}`}
+                    } ${isDimmedNode ? 'presentation-dimmed' : ''} ${
+                      isFilterMatch ? 'filter-match' : ''
+                    } ${isFilterPath ? 'filter-path' : ''} ${
+                      isFilterDimmed ? 'filter-dimmed' : ''
+                    }`}
                   style={{
                     left: `${anchorLeft}px`,
                     top: `${lNode.y}px`,
@@ -753,6 +926,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   }}
                   onClick={e => {
                     e.stopPropagation();
+                    setContextMenu(null);
                     if ((e.ctrlKey || e.metaKey) && onToggleNodeSelection) {
                       onToggleNodeSelection(lNode.id);
                     } else {
@@ -761,8 +935,23 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   }}
                   onDoubleClick={e => {
                     e.stopPropagation();
+                    setContextMenu(null);
                     setSelectedNodeId(lNode.id);
                     setEditingNodeId(lNode.id);
+                  }}
+                  onContextMenu={e => {
+                    if (isPresentationActive) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!selectedNodeIds.includes(lNode.id) && selectedNodeId !== lNode.id) {
+                      setSelectedNodeId(lNode.id);
+                    }
+                    setNotePopover(null);
+                    setContextMenu({
+                      nodeId: lNode.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
                   }}
                 >
                   {/* Node Icons */}
@@ -820,32 +1009,25 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   )}
 
                   {/* Link Icon */}
-                  {node.link && (
-                    <a
-                      href={node.link.startsWith('forest://') ? '#' : node.link}
-                      target={node.link.startsWith('forest://') ? undefined : '_blank'}
-                      rel="noopener noreferrer"
-                      className="node-link-btn"
-                      title={`リンクを開く: ${node.link}`}
-                      onClick={e => {
-                        e.stopPropagation();
-                        if (node.link?.startsWith('forest://') && onNavigateTab) {
-                          e.preventDefault();
-                          onNavigateTab(node.link.replace('forest://', ''));
-                        } else if (
-                          node.link &&
-                          onOpenFileLink &&
-                          /\.(mm|md)$/i.test(node.link.trim()) &&
-                          !/^https?:\/\//i.test(node.link.trim())
-                        ) {
-                          e.preventDefault();
-                          onOpenFileLink(node.link);
-                        }
-                      }}
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
+                  {node.link && (() => {
+                    const parsedLink = parseForestMindLink(node.link);
+                    const isExternalLink = parsedLink.kind === 'external';
+                    return (
+                      <a
+                        href={isExternalLink ? node.link : '#'}
+                        target={isExternalLink ? '_blank' : undefined}
+                        rel="noopener noreferrer"
+                        className="node-link-btn"
+                        title={`リンクを開く: ${node.link}`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleLinkClick(e, node.link!);
+                        }}
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    );
+                  })()}
 
                   {/* Note Indicator */}
                   {node.noteHtml && (
@@ -912,7 +1094,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   )}
 
                   {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
-                  {hasChildren && (!isRoot || node.folded) && (
+                  {hasChildren && (!isDisplayRoot || node.folded) && (
                     <button
                       className={`fold-handle ${node.folded ? 'folded' : 'unfolded'}`}
                       title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}
@@ -926,6 +1108,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       ) : (
                         <span className="fold-dot" />
                       )}
+                      {node.folded && hiddenMatchCount > 0 && (
+                        <span
+                          className="filter-hidden-match-badge"
+                          title={`折りたたみ内に ${hiddenMatchCount} 件の一致`}
+                        >
+                          +{hiddenMatchCount}
+                        </span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -933,6 +1123,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             })}
         </div>
       </div>
+
+      {/* Focus Mode Breadcrumb Overlay */}
+      {!isPresentationActive && focusOverlay}
+
+      {/* Map Filter Floating Overlay */}
+      {!isPresentationActive && filterOverlay}
 
       {/* Quick Style Floating Palette */}
       {!isPresentationActive && quickPaletteOverlay}
@@ -1193,23 +1389,54 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 const anchor = (e.target as HTMLElement).closest('a');
                 if (anchor) {
                   const href = anchor.getAttribute('href');
-                  if (href?.startsWith('forest://') && onNavigateTab) {
-                    e.preventDefault();
-                    onNavigateTab(href.replace('forest://', ''));
-                  } else if (
-                    href &&
-                    onOpenFileLink &&
-                    /\.(mm|md)$/i.test(href.trim()) &&
-                    !/^https?:\/\//i.test(href.trim())
-                  ) {
-                    e.preventDefault();
-                    onOpenFileLink(href);
+                  if (href) {
+                    handleLinkClick(e, href);
                   }
                 }
               }}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
             />
           </div>
+        );
+      })()}
+
+      {/* Node Context Menu */}
+      {!isPresentationActive && contextMenu && (() => {
+        const ctxLayout = layoutNodes.get(contextMenu.nodeId);
+        if (!ctxLayout) return null;
+        const ctxNode = ctxLayout.node;
+        return (
+          <NodeContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            nodeText={ctxNode.text}
+            selectedCount={selectedNodeIds.length > 0 ? selectedNodeIds.length : 1}
+            isTrueMapRoot={ctxLayout.id === map.root.id}
+            isFocusedRoot={Boolean(isFocused && ctxLayout.id === effectiveRoot.id)}
+            hasChildren={ctxNode.children.length > 0}
+            isFolded={Boolean(ctxNode.folded)}
+            onAddChild={() => onAddChild(ctxLayout.id)}
+            onAddSibling={() => onAddSibling(ctxLayout.id)}
+            onEditText={() => {
+              setSelectedNodeId(ctxLayout.id);
+              setEditingNodeId(ctxLayout.id);
+            }}
+            onToggleFold={() => onToggleFold(ctxLayout.id)}
+            onCopy={() => onCopyNode?.()}
+            onCut={() => onCutNode?.()}
+            onPaste={() => onPasteNode?.()}
+            onDuplicate={() => onDuplicateNode?.()}
+            onCopyNodeLink={() => onCopyNodeLink?.(ctxLayout.id)}
+            onToggleFocus={() => onToggleFocusNode?.(ctxLayout.id)}
+            onOpenQuickPalette={() => {
+              if (!isQuickPaletteOpen) {
+                onToggleQuickPalette?.();
+              }
+            }}
+            onOpenProperties={() => onOpenPropertiesPanel?.()}
+            onDelete={() => onDeleteNode(ctxLayout.id)}
+            onClose={() => setContextMenu(null)}
+          />
         );
       })()}
     </div>

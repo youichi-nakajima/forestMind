@@ -11,12 +11,25 @@ import { HelpModal } from './components/HelpModal';
 import { AboutModal } from './components/AboutModal';
 import { QuickStylePalette } from './components/QuickStylePalette';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
+import { FocusBreadcrumbBar } from './components/FocusBreadcrumbBar';
+import { MapFilterBar } from './components/MapFilterBar';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
 import { parseFreeMindXml } from './parser/freemindParser';
 import { resumeAudioContext } from './utils/audio';
 import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
 import { persistTabsToStorage, prepareTabsForAppClose } from './utils/tabStorage';
+import { buildNodeLinkText } from './utils/nodeLinks';
+import {
+  countActiveFilterConditions,
+  EMPTY_MAP_FILTER,
+  evaluateMapFilter,
+  toggleFilterAttribute,
+  toggleFilterColor,
+  toggleFilterIcon,
+  type MapFilterCriteria,
+} from './utils/mapFilter';
+import { isNodeInsideSubtree, resolveFocusedSubtree } from './utils/focusMode';
 import {
   applyQuickColorToNodes,
   clearColorOnNodes,
@@ -94,6 +107,10 @@ export const App: React.FC = () => {
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
   const [extraSelectedNodeIds, setExtraSelectedNodeIds] = useState<string[]>([]);
   const [isQuickPaletteOpen, setIsQuickPaletteOpen] = useState(false);
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [filterCriteria, setFilterCriteria] = useState<MapFilterCriteria>(EMPTY_MAP_FILTER);
+  const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
+  const [filterMatchIndex, setFilterMatchIndex] = useState(0);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -258,6 +275,8 @@ export const App: React.FC = () => {
     } else {
       setIsForestViewOpen(false);
       setIsQuickPaletteOpen(false);
+      setIsFilterBarOpen(false);
+      setFocusedNodeId(null);
       setExtraSelectedNodeIds([]);
       startPresentation();
     }
@@ -282,9 +301,146 @@ export const App: React.FC = () => {
       prevActiveTabIdRef.current = activeTabId;
       setExtraSelectedNodeIds([]);
       setIsQuickPaletteOpen(false);
+      setFocusedNodeId(null);
+      setFilterCriteria(EMPTY_MAP_FILTER);
+      setFilterMatchIndex(0);
       stopPresentation();
     }
   }, [activeTabId, stopPresentation]);
+
+  const focusState = useMemo(
+    () => resolveFocusedSubtree(map.root, focusedNodeId),
+    [map.root, focusedNodeId]
+  );
+
+  useEffect(() => {
+    if (focusedNodeId && !focusState.isFocused) {
+      setFocusedNodeId(null);
+    }
+  }, [focusedNodeId, focusState.isFocused]);
+
+  const prevFocusedNodeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const activeFocusId = focusState.isFocused ? focusState.activeRoot.id : null;
+    if (prevFocusedNodeIdRef.current !== activeFocusId) {
+      prevFocusedNodeIdRef.current = activeFocusId;
+      const canvasEl = document.querySelector('.mindmap-canvas-container');
+      const viewW = canvasEl ? canvasEl.clientWidth : window.innerWidth;
+      const viewH = canvasEl ? canvasEl.clientHeight : window.innerHeight - 100;
+      setZoomScale(1.0);
+      setPanOffset({ x: viewW / 2, y: viewH / 2 });
+    }
+  }, [focusState.isFocused, focusState.activeRoot.id]);
+
+  const filterResult = useMemo(
+    () => evaluateMapFilter(focusState.activeRoot, filterCriteria),
+    [focusState.activeRoot, filterCriteria]
+  );
+
+  const activeFilterCount = useMemo(
+    () => countActiveFilterConditions(filterCriteria),
+    [filterCriteria]
+  );
+
+  useEffect(() => {
+    if (filterResult.matchedNodeIds.length === 0 || filterMatchIndex >= filterResult.matchedNodeIds.length) {
+      setFilterMatchIndex(0);
+    }
+  }, [filterResult.matchedNodeIds.length, filterMatchIndex]);
+
+  const revealNodeWithinScope = useCallback(
+    (nodeId: string, targetTabId?: string) => {
+      if (
+        (!targetTabId || targetTabId === activeTabId) &&
+        focusState.isFocused &&
+        !isNodeInsideSubtree(focusState.activeRoot, nodeId)
+      ) {
+        setFocusedNodeId(null);
+      }
+      revealAndSelectNode(nodeId, targetTabId);
+    },
+    [activeTabId, focusState.isFocused, focusState.activeRoot, revealAndSelectNode]
+  );
+
+  const handleToggleFocusNode = useCallback(
+    (targetId?: string) => {
+      const resolvedId = targetId ?? selectedNodeId;
+      if (!resolvedId || resolvedId === map.root.id) {
+        setFocusedNodeId(null);
+        return;
+      }
+      setFocusedNodeId(prev => (prev === resolvedId ? null : resolvedId));
+      setSelectedNodeId(resolvedId);
+      setExtraSelectedNodeIds([]);
+    },
+    [selectedNodeId, map.root.id, setSelectedNodeId]
+  );
+
+  const handleCopyNodeLink = useCallback(
+    async (nodeId: string) => {
+      const linkText = buildNodeLinkText({
+        tabId: activeTabId,
+        nodeId,
+        filePath: activeFilePath,
+      });
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(linkText);
+          copied = true;
+        }
+      } catch {
+        copied = false;
+      }
+      if (!copied) {
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = linkText;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          copied = document.execCommand('copy');
+          document.body.removeChild(textarea);
+        } catch {
+          copied = false;
+        }
+      }
+      if (copied) {
+        showToast('🔗 ノードへのリンクをコピーしました');
+      } else {
+        showToast('リンクのコピーに失敗しました');
+      }
+    },
+    [activeTabId, activeFilePath, showToast]
+  );
+
+  const handleSelectLocalNode = useCallback(
+    (nodeId: string) => {
+      if (findNodeInTree(map.root, nodeId)) {
+        revealNodeWithinScope(nodeId);
+      } else {
+        showToast('指定されたノードがマップ内に見つかりませんでした');
+      }
+    },
+    [map.root, revealNodeWithinScope, showToast]
+  );
+
+  const handleNextFilterMatch = useCallback(() => {
+    const ids = filterResult.matchedNodeIds;
+    if (ids.length === 0) return;
+    const nextIdx = (filterMatchIndex + 1) % ids.length;
+    setFilterMatchIndex(nextIdx);
+    revealNodeWithinScope(ids[nextIdx]);
+  }, [filterResult.matchedNodeIds, filterMatchIndex, revealNodeWithinScope]);
+
+  const handlePrevFilterMatch = useCallback(() => {
+    const ids = filterResult.matchedNodeIds;
+    if (ids.length === 0) return;
+    const prevIdx = (filterMatchIndex - 1 + ids.length) % ids.length;
+    setFilterMatchIndex(prevIdx);
+    revealNodeWithinScope(ids[prevIdx]);
+  }, [filterResult.matchedNodeIds, filterMatchIndex, revealNodeWithinScope]);
 
   // Handler for jumping from local folder search to map & node
   const handleOpenSearcherNode = async (
@@ -461,7 +617,10 @@ export const App: React.FC = () => {
   };
 
   const handleFitToScreen = useCallback(() => {
-    const { layoutNodes, clouds } = computeLayout(map.root);
+    const fitRoot = focusState.activeRoot.folded
+      ? { ...focusState.activeRoot, folded: false }
+      : focusState.activeRoot;
+    const { layoutNodes, clouds } = computeLayout(fitRoot);
     const bounds = computeMapBounds(layoutNodes, clouds);
     const canvasEl = document.querySelector('.mindmap-canvas-container');
     const viewW = canvasEl ? canvasEl.clientWidth : window.innerWidth;
@@ -479,7 +638,7 @@ export const App: React.FC = () => {
       x: viewW / 2 - centerX * nextScale,
       y: viewH / 2 - centerY * nextScale,
     });
-  }, [map.root]);
+  }, [focusState.activeRoot]);
 
   // Global F5 & Ctrl+0 key listener
   useEffect(() => {
@@ -763,12 +922,13 @@ export const App: React.FC = () => {
   }, [openFileInTab]);
 
   const handleOpenFileLink = useCallback(
-    async (targetPath: string) => {
+    async (targetPath: string, targetNodeId?: string) => {
       const api = window.electronAPI;
       if (!api) return;
       const res = await api.readFileByPath(targetPath, activeFilePath);
       if (res.ok && res.filePath && res.content !== undefined) {
-        openFileInTab(res.filePath, res.content, res.fileName);
+        openFileInTab(res.filePath, res.content, res.fileName, targetNodeId);
+        setFocusedNodeId(null);
         showToast(`マップを開きました: ${res.fileName || res.filePath}`);
       } else {
         showToast(`リンク先を開けませんでした: ${res.resolvedPath || targetPath}`);
@@ -816,12 +976,52 @@ export const App: React.FC = () => {
         onSearchChange={setSearchQuery}
         searchResultCount={searchResults.length}
         currentSearchIndex={searchIndex}
-        onNextSearch={handleNextSearch}
-        onPrevSearch={handlePrevSearch}
+        onNextSearch={() => {
+          if (searchResults.length > 0 && focusState.isFocused) {
+            const nextIdx = (searchIndex + 1) % searchResults.length;
+            if (!isNodeInsideSubtree(focusState.activeRoot, searchResults[nextIdx])) {
+              setFocusedNodeId(null);
+            }
+          }
+          handleNextSearch();
+        }}
+        onPrevSearch={() => {
+          if (searchResults.length > 0 && focusState.isFocused) {
+            const prevIdx = (searchIndex - 1 + searchResults.length) % searchResults.length;
+            if (!isNodeInsideSubtree(focusState.activeRoot, searchResults[prevIdx])) {
+              setFocusedNodeId(null);
+            }
+          }
+          handlePrevSearch();
+        }}
         isPresentationActive={isPresentationActive}
         onTogglePresentation={handleTogglePresentation}
         isQuickPaletteOpen={isQuickPaletteOpen}
-        onToggleQuickPalette={() => setIsQuickPaletteOpen(prev => !prev)}
+        onToggleQuickPalette={() => {
+          setIsQuickPaletteOpen(prev => {
+            const next = !prev;
+            if (next) setIsFilterBarOpen(false);
+            return next;
+          });
+        }}
+        isFocused={focusState.isFocused}
+        canFocusSelected={Boolean(selectedNodeId && selectedNodeId !== map.root.id)}
+        onToggleFocus={() => {
+          if (focusState.isFocused) {
+            setFocusedNodeId(null);
+          } else {
+            handleToggleFocusNode();
+          }
+        }}
+        isFilterBarOpen={isFilterBarOpen}
+        activeFilterCount={activeFilterCount}
+        onToggleFilterBar={() => {
+          setIsFilterBarOpen(prev => {
+            const next = !prev;
+            if (next) setIsQuickPaletteOpen(false);
+            return next;
+          });
+        }}
       />
 
       {/* Multi-Map Tab Bar (forestMind Forest View feature) */}
@@ -850,6 +1050,7 @@ export const App: React.FC = () => {
             tabs={tabs}
             activeTabId={activeTabId}
             onSelectTabAndNode={(tabId, nodeId) => {
+              setFocusedNodeId(null);
               if (nodeId) {
                 revealAndSelectNode(nodeId, tabId);
               } else {
@@ -910,12 +1111,18 @@ export const App: React.FC = () => {
               onResetZoom={handleResetZoom}
               onFitToScreen={handleFitToScreen}
               searchMatchedIds={searchResults}
-              onNavigateTab={targetTabId => {
+              onNavigateTab={(targetTabId, targetNodeId) => {
                 if (tabs.some(t => t.id === targetTabId)) {
-                  setActiveTabId(targetTabId);
+                  setFocusedNodeId(null);
+                  if (targetNodeId) {
+                    revealAndSelectNode(targetNodeId, targetTabId);
+                  } else {
+                    setActiveTabId(targetTabId);
+                  }
                 }
               }}
               onOpenFileLink={window.electronAPI ? handleOpenFileLink : undefined}
+              onSelectLocalNode={handleSelectLocalNode}
               isPresentationActive={isPresentationActive}
               visibleNodeIds={presentationVisibleNodeIds}
               activeNodeId={presentationActiveNodeId}
@@ -926,9 +1133,72 @@ export const App: React.FC = () => {
               onQuickClearColor={handleQuickClearColor}
               onQuickToggleIcon={handleQuickToggleIconKey}
               onQuickClearIcons={handleQuickClearIcons}
-              onToggleQuickPalette={() => setIsQuickPaletteOpen(prev => !prev)}
+              onToggleQuickPalette={() => {
+                setIsQuickPaletteOpen(prev => {
+                  const next = !prev;
+                  if (next) setIsFilterBarOpen(false);
+                  return next;
+                });
+              }}
               isQuickPaletteOpen={isQuickPaletteOpen}
               onCloseQuickPalette={() => setIsQuickPaletteOpen(false)}
+              focusedRoot={focusState.isFocused ? focusState.activeRoot : null}
+              isFocused={focusState.isFocused}
+              focusOverlay={
+                focusState.isFocused ? (
+                  <FocusBreadcrumbBar
+                    breadcrumbs={focusState.breadcrumbs}
+                    onSelectBreadcrumb={nodeId => setFocusedNodeId(nodeId)}
+                    onExitFocus={() => setFocusedNodeId(null)}
+                  />
+                ) : null
+              }
+              filterResult={filterResult}
+              isFilterBarOpen={isFilterBarOpen}
+              onToggleFilterBar={() => {
+                setIsFilterBarOpen(prev => {
+                  const next = !prev;
+                  if (next) setIsQuickPaletteOpen(false);
+                  return next;
+                });
+              }}
+              onCloseFilterBar={() => setIsFilterBarOpen(false)}
+              onClearFilter={() => {
+                setFilterCriteria(EMPTY_MAP_FILTER);
+                setFilterMatchIndex(0);
+              }}
+              onToggleFocusNode={handleToggleFocusNode}
+              onExitFocus={() => setFocusedNodeId(null)}
+              onCopyNodeLink={handleCopyNodeLink}
+              onOpenPropertiesPanel={() => setIsPropertiesOpen(true)}
+              filterOverlay={
+                <MapFilterBar
+                  isOpen={isFilterBarOpen}
+                  criteria={filterCriteria}
+                  matchedCount={filterResult.matchedNodeIds.length}
+                  currentMatchIndex={filterMatchIndex}
+                  isDarkMode={isDarkMode}
+                  onToggleColor={presetId => {
+                    setFilterCriteria(prev => toggleFilterColor(prev, presetId));
+                    setFilterMatchIndex(0);
+                  }}
+                  onToggleIcon={builtin => {
+                    setFilterCriteria(prev => toggleFilterIcon(prev, builtin));
+                    setFilterMatchIndex(0);
+                  }}
+                  onToggleAttribute={(name, value) => {
+                    setFilterCriteria(prev => toggleFilterAttribute(prev, name, value));
+                    setFilterMatchIndex(0);
+                  }}
+                  onPrevMatch={handlePrevFilterMatch}
+                  onNextMatch={handleNextFilterMatch}
+                  onClear={() => {
+                    setFilterCriteria(EMPTY_MAP_FILTER);
+                    setFilterMatchIndex(0);
+                  }}
+                  onClose={() => setIsFilterBarOpen(false)}
+                />
+              }
               quickPaletteOverlay={
                 <QuickStylePalette
                   isOpen={isQuickPaletteOpen}

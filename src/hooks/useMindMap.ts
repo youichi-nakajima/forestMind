@@ -186,7 +186,13 @@ export function useMindMap() {
 
   // Tab operations
   const createNewTab = useCallback(
-    (customMap?: FreeMindMap, title?: string, filePath?: string, initialDirty: boolean = false) => {
+    (
+      customMap?: FreeMindMap,
+      title?: string,
+      filePath?: string,
+      initialDirty: boolean = false,
+      initialSelectedNodeId?: string
+    ) => {
       const newId = `tab_${Date.now()}_${++tabIdCounter}`;
       const newMap: FreeMindMap = customMap || {
         version: '1.0.1',
@@ -203,6 +209,12 @@ export function useMindMap() {
         },
       };
 
+      let resolvedSelectedId = newMap.root.id;
+      if (initialSelectedNodeId && findNode(newMap.root, initialSelectedNodeId)) {
+        unfoldAncestors(newMap.root, initialSelectedNodeId);
+        resolvedSelectedId = initialSelectedNodeId;
+      }
+
       const newTab: MapTab = {
         id: newId,
         title: newMap.root.text || title || '新規マップ',
@@ -210,7 +222,7 @@ export function useMindMap() {
         map: newMap,
         past: [],
         future: [],
-        selectedNodeId: newMap.root.id,
+        selectedNodeId: resolvedSelectedId,
         isDirty: initialDirty,
         savedPastLength: initialDirty ? undefined : 0,
       };
@@ -245,7 +257,7 @@ export function useMindMap() {
   }, []);
 
   const openFileInTab = useCallback(
-    (filePath: string, content: string, fileName?: string) => {
+    (filePath: string, content: string, fileName?: string, targetNodeId?: string) => {
       lastPropEditRef.current = null;
       const normalized = filePath.toLowerCase();
       const existing = tabsRef.current.find(t => t.filePath?.toLowerCase() === normalized);
@@ -256,6 +268,11 @@ export function useMindMap() {
               content,
               fileName || filePath
             );
+            let resolvedSelectedId = diskMap.root.id;
+            if (targetNodeId && findNode(diskMap.root, targetNodeId)) {
+              unfoldAncestors(diskMap.root, targetNodeId);
+              resolvedSelectedId = targetNodeId;
+            }
             setTabs(prev =>
               prev.map(t =>
                 t.id === existing.id && !t.isDirty
@@ -265,7 +282,7 @@ export function useMindMap() {
                       map: diskMap,
                       past: [],
                       future: [],
-                      selectedNodeId: diskMap.root.id,
+                      selectedNodeId: resolvedSelectedId,
                       isDirty: false,
                       savedPastLength: 0,
                     }
@@ -275,6 +292,10 @@ export function useMindMap() {
           } catch (err) {
             console.warn('Failed to refresh existing file tab:', err);
           }
+        } else if (targetNodeId && findNode(existing.map.root, targetNodeId)) {
+          setTabs(prev =>
+            prev.map(t => (t.id === existing.id ? revealNodeOnTab(t, targetNodeId) : t))
+          );
         }
         setActiveTabId(existing.id);
         pendingNewNodeRef.current = null;
@@ -283,7 +304,7 @@ export function useMindMap() {
       }
 
       const { map: newMap, fallbackTitle } = parseFileContentToMap(content, fileName || filePath);
-      createNewTab(newMap, fallbackTitle, filePath);
+      createNewTab(newMap, fallbackTitle, filePath, false, targetNodeId);
     },
     [createNewTab]
   );
@@ -1162,34 +1183,7 @@ export function useMindMap() {
         setActiveTabId(targetTabId);
       }
       setTabs(prev =>
-        prev.map(t => {
-          if (t.id !== resolvedTabId) return t;
-          const clonedMap = JSON.parse(JSON.stringify(t.map)) as FreeMindMap;
-          const changed = unfoldAncestors(clonedMap.root, targetNodeId);
-          if (!changed) {
-            return { ...t, selectedNodeId: targetNodeId };
-          }
-          const dropped = t.past.length >= 31 ? 1 : 0;
-          const nextPast = [...t.past.slice(-30), t.map];
-          let nextSavedPastLen = t.savedPastLength;
-          if (nextSavedPastLen !== undefined) {
-            if (t.past.length < nextSavedPastLen) {
-              nextSavedPastLen = undefined;
-            } else if (dropped > 0) {
-              nextSavedPastLen = nextSavedPastLen - 1;
-              if (nextSavedPastLen < 0) nextSavedPastLen = undefined;
-            }
-          }
-          return {
-            ...t,
-            map: clonedMap,
-            past: nextPast,
-            future: [],
-            selectedNodeId: targetNodeId,
-            isDirty: nextSavedPastLen === undefined || nextPast.length !== nextSavedPastLen,
-            savedPastLength: nextSavedPastLen,
-          };
-        })
+        prev.map(t => (t.id === resolvedTabId ? revealNodeOnTab(t, targetNodeId) : t))
       );
     },
     [activeTabId]
@@ -1311,6 +1305,34 @@ export function useMindMap() {
     handlePrevSearch,
     revealAndSelectNode,
     openMapAndSelectNode,
+  };
+}
+
+function revealNodeOnTab(t: MapTab, targetNodeId: string): MapTab {
+  const clonedMap = JSON.parse(JSON.stringify(t.map)) as FreeMindMap;
+  const changed = unfoldAncestors(clonedMap.root, targetNodeId);
+  if (!changed) {
+    return { ...t, selectedNodeId: targetNodeId };
+  }
+  const dropped = t.past.length >= 31 ? 1 : 0;
+  const nextPast = [...t.past.slice(-30), t.map];
+  let nextSavedPastLen = t.savedPastLength;
+  if (nextSavedPastLen !== undefined) {
+    if (t.past.length < nextSavedPastLen) {
+      nextSavedPastLen = undefined;
+    } else if (dropped > 0) {
+      nextSavedPastLen = nextSavedPastLen - 1;
+      if (nextSavedPastLen < 0) nextSavedPastLen = undefined;
+    }
+  }
+  return {
+    ...t,
+    map: clonedMap,
+    past: nextPast,
+    future: [],
+    selectedNodeId: targetNodeId,
+    isDirty: nextSavedPastLen === undefined || nextPast.length !== nextSavedPastLen,
+    savedPastLength: nextSavedPastLen,
   };
 }
 

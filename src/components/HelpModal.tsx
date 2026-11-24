@@ -19,6 +19,7 @@ const SHORTCUT_GROUPS = [
       { key: 'Esc (新規作成直後)', desc: '作成した新規ノードを削除してキャンセル' },
       { key: 'Delete / Backspace', desc: '選択ノードを削除' },
       { key: 'ドラッグ＆ドロップ', desc: 'ノードを別の親ノードへ移動' },
+      { key: '右クリック / Shift + F10', desc: 'ノードコンテキストメニュー（リンクコピー等）' },
     ],
   },
   {
@@ -28,6 +29,7 @@ const SHORTCUT_GROUPS = [
       { key: '→', desc: '右の子ノードへ移動（左ブランチ時は親へ）' },
       { key: '←', desc: '左の子ノードへ移動（右ブランチ時は親へ）' },
       { key: 'Space / ○アイコン', desc: 'ノードの展開 / 折りたたみを切り替え' },
+      { key: 'Ctrl + Shift + F', desc: '選択ブランチのフォーカスモード (Hoist) を切り替え' },
       { key: 'ドラッグ (背景)', desc: 'キャンバスをスクロール・移動' },
       { key: 'マウスホイール', desc: 'キャンバスを拡大 / 縮小' },
     ],
@@ -51,6 +53,7 @@ const SHORTCUT_GROUPS = [
       { key: 'Ctrl + F', desc: 'マップ内検索バーにフォーカス' },
       { key: 'Enter (検索中)', desc: '次の一致ノードへジャンプ' },
       { key: 'Shift + Enter', desc: '前の一致ノードへジャンプ' },
+      { key: 'Ctrl + Shift + L', desc: 'マップ内フィルタ（色・アイコン・属性）を開閉' },
     ],
   },
   {

@@ -20,6 +20,8 @@ import {
   Moon,
   Image as ImageIcon,
   Palette,
+  Filter,
+  Focus,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -57,6 +59,12 @@ interface ToolbarProps {
   onTogglePresentation?: () => void;
   isQuickPaletteOpen?: boolean;
   onToggleQuickPalette?: () => void;
+  isFocused?: boolean;
+  canFocusSelected?: boolean;
+  onToggleFocus?: () => void;
+  isFilterBarOpen?: boolean;
+  activeFilterCount?: number;
+  onToggleFilterBar?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -94,6 +102,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onTogglePresentation,
   isQuickPaletteOpen = false,
   onToggleQuickPalette,
+  isFocused = false,
+  canFocusSelected = false,
+  onToggleFocus,
+  isFilterBarOpen = false,
+  activeFilterCount = 0,
+  onToggleFilterBar,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -299,7 +313,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="toolbar-divider" />
 
-      {/* Fold / Unfold All */}
+      {/* Fold / Unfold All & Focus */}
       <div className="toolbar-group">
         <button
           className="toolbar-btn icon-only"
@@ -315,6 +329,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <ChevronsUp size={16} />
         </button>
+        {onToggleFocus && (
+          <button
+            type="button"
+            className={`toolbar-btn icon-only focus-trigger-btn ${isFocused ? 'active' : ''}`}
+            disabled={!isFocused && !canFocusSelected}
+            title={
+              isFocused
+                ? 'フォーカス解除 (Esc)'
+                : '選択ブランチにフォーカス (Ctrl+Shift+F)'
+            }
+            aria-label="フォーカスモード切替"
+            onClick={onToggleFocus}
+          >
+            <Focus size={16} />
+          </button>
+        )}
       </div>
 
       <div className="toolbar-divider" />
@@ -433,6 +463,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       >
         <FolderSearch size={16} />
       </button>
+
+      {/* In-Map Filter Toggle */}
+      {onToggleFilterBar && (
+        <button
+          type="button"
+          className={`toolbar-btn filter-trigger-btn ${
+            isFilterBarOpen || activeFilterCount > 0 ? 'active' : ''
+          }`}
+          title="マップ内フィルタ (Ctrl+Shift+L)"
+          aria-label="マップ内フィルタ"
+          onClick={onToggleFilterBar}
+        >
+          <Filter size={15} />
+          <span>フィルタ</span>
+          {activeFilterCount > 0 && (
+            <span className="toolbar-filter-badge">{activeFilterCount}</span>
+          )}
+        </button>
+      )}
 
       <div className="toolbar-spacer" />
 

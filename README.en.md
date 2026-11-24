@@ -25,6 +25,9 @@ A modern **FreeMind 1.0.1 compatible** mind map editor. Running both in the brow
 - **Drag & Drop Visual Guide**: highlights the drop target with a badge and glow to prevent mistakes
 - **Dark Theme**: one-click toggle between light and dark modes from the toolbar (🌙 / ☀️)
 - **Quick Styling, Icons & Attribute Tags**: press `1`–`6` to apply/toggle color presets (`0` to clear), `Alt+1`–`9` for built-in icons, or `Q` / `Ctrl+K` to open the floating palette for priority/status attribute tags across single or `Ctrl+Click` multi-selected nodes (with automatic high-contrast dark mode rendering)
+- **Node Context Menu & Node Link Copy**: right-click any node (or press `Shift+F10`) for quick editing, cloning, focus, styling, and **"Copy Link to This Node"** (`.mm#NODE_ID` or `forest://TAB_ID#NODE_ID`) to jump directly to specific nodes
+- **In-Map Spotlight Filter (`Ctrl+Shift+L`)**: filter nodes by quick color, icon, and priority/status attributes, highlighting matches and ancestor paths while dimming others (with `+N` hidden-match badges on folded branches and next/prev jump)
+- **Focus Mode / Branch Hoist (`Ctrl+Shift+F`)**: temporarily hoist the selected branch as the root for distraction-free editing, with a top breadcrumb bar to step back to any ancestor or exit (`Esc`)
 - **Interactive Minimap & Fit to Screen (`Ctrl+0`)**: overview minimap in the bottom-right corner with click/drag navigation and one-key fit-to-screen
 - **Note Popover**: hover or click note icons to preview HTML / simple Markdown notes, with quick edit and delete actions
 - **Unsaved Indicator (`*`) & Close Confirmation**: marks dirty tabs with `*` and prompts to save before closing tabs or exiting the app
@@ -111,6 +114,7 @@ Scan a local folder recursively to search across `.mm` files:
 | `Esc` (right after creation) | Delete newly created node and cancel |
 | `Delete` / `Backspace` | Delete selected node |
 | Drag & Drop | Reparent node |
+| Right-click / `Shift` + `F10` | Open node context menu (copy node link, etc.) |
 
 ### Quick Styling, Icons & Tags
 
@@ -130,6 +134,7 @@ Scan a local folder recursively to search across `.mm` files:
 | `↑` / `↓` | Move between sibling nodes |
 | `→` / `←` | Move to child / parent node |
 | `Space` | Fold / unfold node |
+| `Ctrl` + `Shift` + `F` | Toggle Focus Mode (Hoist) on selected branch |
 | `Ctrl` + `0` | Fit map to screen |
 | `Ctrl` + `S` | Save / Save As (Desktop) |
 | Drag background | Pan canvas |
@@ -142,6 +147,7 @@ Scan a local folder recursively to search across `.mm` files:
 | `Ctrl` + `Z` / `Ctrl` + `Y` | Undo / Redo |
 | `Ctrl` + `F` | Focus in-map search |
 | `Enter` / `Shift` + `Enter` | Jump to next / previous match |
+| `Ctrl` + `Shift` + `L` | Toggle in-map spotlight filter bar |
 
 ### Presentation Mode
 

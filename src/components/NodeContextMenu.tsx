@@ -30,6 +30,7 @@ interface NodeContextMenuProps {
   selectedCount: number;
   isTrueMapRoot: boolean;
   isFocusedRoot: boolean;
+  canModifySelection?: boolean;
   hasChildren: boolean;
   isFolded: boolean;
   onAddChild: () => void;
@@ -76,6 +77,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   selectedCount,
   isTrueMapRoot,
   isFocusedRoot,
+  canModifySelection,
   hasChildren,
   isFolded,
   onAddChild,
@@ -139,6 +141,8 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
     fn();
     onClose();
   };
+
+  const allowModify = canModifySelection ?? !isTrueMapRoot;
 
   const headerLabel =
     selectedCount > 1 ? `${selectedCount}ノード選択中` : nodeText || '(無題ノード)';
@@ -226,7 +230,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       <button
         type="button"
         role="menuitem"
-        disabled={isTrueMapRoot}
+        disabled={!allowModify}
         className="context-menu-item"
         onClick={() => runAction(onCut)}
       >
@@ -249,7 +253,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       <button
         type="button"
         role="menuitem"
-        disabled={isTrueMapRoot}
+        disabled={!allowModify}
         className="context-menu-item"
         onClick={() => runAction(onDuplicate)}
       >
@@ -333,7 +337,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       <button
         type="button"
         role="menuitem"
-        disabled={isTrueMapRoot}
+        disabled={!allowModify}
         className="context-menu-item danger"
         onClick={() => runAction(onDelete)}
       >

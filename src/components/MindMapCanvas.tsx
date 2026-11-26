@@ -28,7 +28,7 @@ interface MindMapCanvasProps {
   onDeleteNode: (nodeId: string) => void;
   onUpdateText: (nodeId: string, text: string) => void;
   onClearNote?: (nodeId: string) => void;
-  onToggleFold: (nodeId: string) => void;
+  onToggleFold: (nodeId: string, singleOnly?: boolean) => void;
   onMoveNode: (draggedId: string, targetId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -562,7 +562,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         onDeleteNode(selectedNodeId);
       } else if (e.key === ' ') {
         e.preventDefault();
-        onToggleFold(selectedNodeId);
+        onToggleFold(selectedNodeId, false);
       } else if (e.key === 'F2') {
         e.preventDefault();
         setEditingNodeId(selectedNodeId);
@@ -667,14 +667,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
   const handleLinkClick = (e: React.MouseEvent, rawHref: string) => {
     const parsed = parseForestMindLink(rawHref);
-    if (parsed.kind === 'forest' && onNavigateTab) {
+    if (parsed.kind !== 'external') {
       e.preventDefault();
+    }
+    if (parsed.kind === 'forest' && onNavigateTab) {
       onNavigateTab(parsed.tabId, parsed.nodeId);
     } else if (parsed.kind === 'file' && onOpenFileLink) {
-      e.preventDefault();
       onOpenFileLink(parsed.filePath, parsed.nodeId);
     } else if (parsed.kind === 'localNode' && onSelectLocalNode) {
-      e.preventDefault();
       onSelectLocalNode(parsed.nodeId);
     }
   };
@@ -1000,6 +1000,16 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       {node.htmlContent ? (
                         <span
                           className="node-html-content"
+                          onClick={e => {
+                            const anchor = (e.target as HTMLElement).closest('a');
+                            if (anchor) {
+                              const href = anchor.getAttribute('href');
+                              if (href) {
+                                e.stopPropagation();
+                                handleLinkClick(e, href);
+                              }
+                            }
+                          }}
                           dangerouslySetInnerHTML={{ __html: sanitizeNodeHtml(node.htmlContent) }}
                         />
                       ) : (
@@ -1100,7 +1110,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}
                       onClick={e => {
                         e.stopPropagation();
-                        onToggleFold(lNode.id);
+                        onToggleFold(lNode.id, true);
                       }}
                     >
                       {node.folded ? (
@@ -1405,6 +1415,8 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         const ctxLayout = layoutNodes.get(contextMenu.nodeId);
         if (!ctxLayout) return null;
         const ctxNode = ctxLayout.node;
+        const hasNonRootInSelection =
+          selectedNodeIds.some(id => id !== map.root.id) || ctxLayout.id !== map.root.id;
         return (
           <NodeContextMenu
             x={contextMenu.x}
@@ -1413,6 +1425,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             selectedCount={selectedNodeIds.length > 0 ? selectedNodeIds.length : 1}
             isTrueMapRoot={ctxLayout.id === map.root.id}
             isFocusedRoot={Boolean(isFocused && ctxLayout.id === effectiveRoot.id)}
+            canModifySelection={hasNonRootInSelection}
             hasChildren={ctxNode.children.length > 0}
             isFolded={Boolean(ctxNode.folded)}
             onAddChild={() => onAddChild(ctxLayout.id)}
@@ -1421,7 +1434,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               setSelectedNodeId(ctxLayout.id);
               setEditingNodeId(ctxLayout.id);
             }}
-            onToggleFold={() => onToggleFold(ctxLayout.id)}
+            onToggleFold={() => onToggleFold(ctxLayout.id, false)}
             onCopy={() => onCopyNode?.()}
             onCut={() => onCutNode?.()}
             onPaste={() => onPasteNode?.()}

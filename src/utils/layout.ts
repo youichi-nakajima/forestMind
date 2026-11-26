@@ -1,4 +1,5 @@
 import { FreeMindNode, NodePosition } from '../types/freemind';
+import { getNodePlainText } from './treeUtils';
 
 export interface LayoutNode {
   node: FreeMindNode;
@@ -93,7 +94,7 @@ export function estimateNodeDimensions(
   node: FreeMindNode,
   isRoot: boolean = false
 ): { width: number; height: number } {
-  const rawText = node.text || (node.htmlContent ? node.htmlContent.replace(/<[^>]+>/g, '').trim() : 'Node');
+  const rawText = getNodePlainText(node) || 'Node';
   const text = rawText || ' ';
   const baseFontSize = node.font?.size || (isRoot ? 17 : 14);
   const isBold = node.font?.bold || isRoot;

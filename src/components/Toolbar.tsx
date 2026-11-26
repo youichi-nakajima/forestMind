@@ -222,6 +222,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           >
             <HelpCircle size={16} />
           </button>
+          {onToggleTheme && (
+            <button
+              className="toolbar-btn icon-only"
+              title={isDarkMode ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え'}
+              onClick={onToggleTheme}
+            >
+              {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          )}
         </div>
       </header>
     );

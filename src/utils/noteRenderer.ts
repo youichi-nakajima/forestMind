@@ -1,3 +1,5 @@
+import { parseForestMindLink } from './nodeLinks';
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -7,14 +9,43 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function isSafeUrl(url: string): boolean {
-  const trimmed = url.trim().toLowerCase();
-  return (
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('mailto:') ||
-    trimmed.startsWith('forest://')
-  );
+function hasControlChars(str: string): boolean {
+  for (const ch of str) {
+    if ((ch.codePointAt(0) ?? 0) < 0x20) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function classifySafeHref(url: string): 'external' | 'internal' | null {
+  const trimmed = url.trim();
+  if (!trimmed || hasControlChars(trimmed)) return null;
+
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('mailto:')
+  ) {
+    return 'external';
+  }
+
+  const parsed = parseForestMindLink(trimmed);
+  if (parsed.kind === 'forest') {
+    return parsed.tabId ? 'internal' : null;
+  }
+  if (parsed.kind === 'localNode') {
+    return 'internal';
+  }
+  if (parsed.kind === 'file') {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) && !/^[a-zA-Z]:[\\/]/.test(trimmed)) {
+      return null;
+    }
+    return 'internal';
+  }
+
+  return null;
 }
 
 const ALLOWED_TAGS = new Set([
@@ -92,11 +123,15 @@ export function sanitizeNoteHtml(rawHtml: string): string {
     }
 
     if (tag === 'a') {
-      const href = el.getAttribute('href') || '';
-      if (!isSafeUrl(href)) {
+      const href = (el.getAttribute('href') || '').trim();
+      const kind = classifySafeHref(href);
+      if (!kind) {
         return childrenHtml;
       }
-      return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${childrenHtml}</a>`;
+      if (kind === 'external') {
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${childrenHtml}</a>`;
+      }
+      return `<a href="${escapeHtml(href)}">${childrenHtml}</a>`;
     }
 
     return `<${tag}>${childrenHtml}</${tag}>`;
@@ -115,15 +150,23 @@ function formatInlineMarkdown(escapedLine: string): string {
   out = out.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
   // Markdown links [text](url)
   out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label: string, url: string) => {
-    const rawUrl = url.replace(/&amp;/g, '&');
-    if (!isSafeUrl(rawUrl)) return label;
-    return `<a href="${escapeHtml(rawUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    const rawUrl = url.replace(/&amp;/g, '&').trim();
+    const kind = classifySafeHref(rawUrl);
+    if (!kind) return label;
+    if (kind === 'external') {
+      return `<a href="${escapeHtml(rawUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+    return `<a href="${escapeHtml(rawUrl)}">${label}</a>`;
   });
-  // Auto-link bare URLs not already inside href="..."
-  out = out.replace(/(^|[\s(>])(https?:\/\/[^\s<)]+)/g, (_m, prefix: string, url: string) => {
-    const rawUrl = url.replace(/&amp;/g, '&');
-    if (!isSafeUrl(rawUrl)) return `${prefix}${url}`;
-    return `${prefix}<a href="${escapeHtml(rawUrl)}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  // Auto-link bare URLs and forest:// links not already inside href="..."
+  out = out.replace(/(^|[\s(>])((?:https?:\/\/|forest:\/\/)[^\s<)]+)/g, (_m, prefix: string, url: string) => {
+    const rawUrl = url.replace(/&amp;/g, '&').trim();
+    const kind = classifySafeHref(rawUrl);
+    if (!kind) return `${prefix}${url}`;
+    if (kind === 'external') {
+      return `${prefix}<a href="${escapeHtml(rawUrl)}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    }
+    return `${prefix}<a href="${escapeHtml(rawUrl)}">${url}</a>`;
   });
   return out;
 }

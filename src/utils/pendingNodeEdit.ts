@@ -1,5 +1,6 @@
 import type { FreeMindMap, FreeMindNode } from '../types/freemind';
 import type { MapTab } from '../hooks/useMindMap';
+import { cloneMindMap } from './treeUtils';
 
 export interface PendingNewNodeEdit {
   tabId: string;
@@ -44,7 +45,7 @@ export function commitPendingNewNodeTextOnTab(
   nodeId: string,
   text: string
 ): MapTab {
-  const clonedMap = JSON.parse(JSON.stringify(tab.map)) as FreeMindMap;
+  const clonedMap = cloneMindMap(tab.map);
   const target = findNodeInSubtree(clonedMap.root, nodeId);
   if (!target) {
     return tab;

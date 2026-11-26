@@ -1,6 +1,7 @@
 import { FreeMindNode } from '../types/freemind';
 import { computeLayout, LayoutNode, RenderCloud } from './layout';
 import { resolveNodeDisplayColors } from './quickStyle';
+import { getNodePlainText, sanitizeDownloadFileName } from './treeUtils';
 
 export interface MapBounds {
   minX: number;
@@ -185,7 +186,7 @@ export function buildMindMapSvg(
             .map(a => `[${a.name}:${a.value}]`)
             .join(' ') + (node.attributes.length > 3 ? ` +${node.attributes.length - 3}` : '')
         : '';
-    const label = [iconsStr, node.text || '', attrsStr, badges.join('')].filter(Boolean).join(' ');
+    const label = [iconsStr, getNodePlainText(node), attrsStr, badges.join('')].filter(Boolean).join(' ');
     const textColor = resolved.color || (isRoot ? rootText : defaultText);
 
     parts.push(
@@ -218,7 +219,7 @@ export function exportMindMapAsSvg(
 ): void {
   const { svg } = buildMindMapSvg(rootNode, { isDarkMode });
   const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-  triggerDownload(blob, `${filenameBase || 'mindmap'}.svg`);
+  triggerDownload(blob, `${sanitizeDownloadFileName(filenameBase, 'mindmap')}.svg`);
 }
 
 /**
@@ -262,7 +263,7 @@ export async function exportMindMapAsPng(
       }, 'image/png');
     });
 
-    triggerDownload(pngBlob, `${filenameBase || 'mindmap'}.png`);
+    triggerDownload(pngBlob, `${sanitizeDownloadFileName(filenameBase, 'mindmap')}.png`);
   } finally {
     URL.revokeObjectURL(url);
   }

@@ -20,6 +20,7 @@ import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
 import { persistTabsToStorage, prepareTabsForAppClose } from './utils/tabStorage';
 import { buildNodeLinkText } from './utils/nodeLinks';
+import { sanitizeDownloadFileName } from './utils/treeUtils';
 import {
   countActiveFilterConditions,
   EMPTY_MAP_FILTER,
@@ -66,6 +67,7 @@ export const App: React.FC = () => {
     addChildNode,
     addSiblingNode,
     deleteNode,
+    deleteNodes,
     updateNodeText,
     toggleFold,
     unfoldAll,
@@ -142,26 +144,6 @@ export const App: React.FC = () => {
     }, 1800);
   }, []);
 
-  const handleCopy = useCallback(async () => {
-    const ok = await copyNode();
-    if (ok) showToast('📋 ノードをコピーしました');
-  }, [copyNode, showToast]);
-
-  const handleCut = useCallback(async () => {
-    const ok = await cutNode();
-    if (ok) showToast('✂️ ノードをカットしました');
-  }, [cutNode, showToast]);
-
-  const handlePaste = useCallback(async () => {
-    const ok = await pasteNode();
-    if (ok) showToast('📋 ノードを貼り付けました');
-  }, [pasteNode, showToast]);
-
-  const handleDuplicate = useCallback(() => {
-    const ok = duplicateNode();
-    if (ok) showToast('📑 ノードを複製しました');
-  }, [duplicateNode, showToast]);
-
   // Warn once if some saved tabs could not be restored from localStorage
   const hasWarnedLoadFailureRef = useRef(false);
   useEffect(() => {
@@ -169,7 +151,7 @@ export const App: React.FC = () => {
     hasWarnedLoadFailureRef.current = true;
     window.alert(
       `前回のセッションから一部のタブを復元できませんでした:\n${storageLoadFailedTitles.join('\n')}\n\n` +
-        '元のデータはブラウザ内 (localStorage の "forestmind_corrupt_tabs_backup") に退避しています。'
+      '元のデータはブラウザ内 (localStorage の "forestmind_corrupt_tabs_backup") に退避しています。'
     );
   }, [storageLoadFailedTitles]);
 
@@ -184,7 +166,7 @@ export const App: React.FC = () => {
     hasWarnedSaveFailureRef.current = true;
     window.alert(
       'ブラウザ内への自動保存に失敗しました（容量超過の可能性があります）。\n' +
-        '未保存のマップはファイルに保存し、不要なタブを閉じてください。'
+      '未保存のマップはファイルに保存し、不要なタブを閉じてください。'
     );
   }, [storageSaveFailed]);
 
@@ -194,11 +176,11 @@ export const App: React.FC = () => {
       const next = !prev;
       if (next) {
         if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
+          document.documentElement.requestFullscreen().catch(() => { });
         }
       } else {
         if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
+          document.exitFullscreen().catch(() => { });
         }
       }
       return next;
@@ -251,7 +233,7 @@ export const App: React.FC = () => {
 
   const handleStopPresentation = useCallback(() => {
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
     setIsCinemaMode(false);
     stopPresentation();
@@ -262,7 +244,7 @@ export const App: React.FC = () => {
     if (!isPresentationActive) {
       setIsCinemaMode(false);
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
     }
   }, [isPresentationActive]);
@@ -531,6 +513,40 @@ export const App: React.FC = () => {
     [map.root, effectiveSelectedNodeIds]
   );
 
+  const handleCopy = useCallback(async () => {
+    const targets = effectiveSelectedNodeIds.length > 0 ? effectiveSelectedNodeIds : undefined;
+    const ok = await copyNode(targets);
+    if (ok) {
+      const count = targets?.length ?? 1;
+      showToast(count > 1 ? `📋 ${count}件のノードをコピーしました` : '📋 ノードをコピーしました');
+    }
+  }, [copyNode, effectiveSelectedNodeIds, showToast]);
+
+  const handleCut = useCallback(async () => {
+    const targets = effectiveSelectedNodeIds.length > 0 ? effectiveSelectedNodeIds : undefined;
+    const ok = await cutNode(targets);
+    if (ok) {
+      const nonRootCount = targets ? targets.filter(id => id !== map.root.id).length : 1;
+      setExtraSelectedNodeIds([]);
+      showToast(nonRootCount > 1 ? `✂️ ${nonRootCount}件のノードをカットしました` : '✂️ ノードをカットしました');
+    }
+  }, [cutNode, effectiveSelectedNodeIds, map.root.id, showToast]);
+
+  const handlePaste = useCallback(async () => {
+    const ok = await pasteNode();
+    if (ok) showToast('📋 ノードを貼り付けました');
+  }, [pasteNode, showToast]);
+
+  const handleDuplicate = useCallback(() => {
+    const targets = effectiveSelectedNodeIds.length > 0 ? effectiveSelectedNodeIds : undefined;
+    const ok = duplicateNode(targets);
+    if (ok) {
+      const nonRootCount = targets ? targets.filter(id => id !== map.root.id).length : 1;
+      setExtraSelectedNodeIds([]);
+      showToast(nonRootCount > 1 ? `📑 ${nonRootCount}件のノードを複製しました` : '📑 ノードを複製しました');
+    }
+  }, [duplicateNode, effectiveSelectedNodeIds, map.root.id, showToast]);
+
   const handleQuickColorPreset = useCallback(
     (preset: QuickColorPreset) => {
       if (effectiveSelectedNodeIds.length === 0) return;
@@ -659,7 +675,7 @@ export const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${map.root.text || 'mindmap'}.mm`;
+    a.download = `${sanitizeDownloadFileName(map.root.text)}.mm`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -674,7 +690,7 @@ export const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${map.root.text || 'mindmap'}.md`;
+    a.download = `${sanitizeDownloadFileName(map.root.text)}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -682,13 +698,25 @@ export const App: React.FC = () => {
   };
 
   const handleExportSvg = () => {
-    exportMindMapAsSvg(map.root, map.root.text || 'mindmap', isDarkMode);
+    const exportRoot = focusState.isFocused
+      ? { ...focusState.activeRoot, folded: false }
+      : map.root;
+    const filenameBase = sanitizeDownloadFileName(
+      focusState.isFocused ? focusState.activeRoot.text : map.root.text
+    );
+    exportMindMapAsSvg(exportRoot, filenameBase, isDarkMode);
     showToast('SVG画像を書き出しました');
   };
 
   const handleExportPng = async () => {
     try {
-      await exportMindMapAsPng(map.root, map.root.text || 'mindmap', isDarkMode);
+      const exportRoot = focusState.isFocused
+        ? { ...focusState.activeRoot, folded: false }
+        : map.root;
+      const filenameBase = sanitizeDownloadFileName(
+        focusState.isFocused ? focusState.activeRoot.text : map.root.text
+      );
+      await exportMindMapAsPng(exportRoot, filenameBase, isDarkMode);
       showToast('PNG画像を書き出しました');
     } catch {
       showToast('PNGの書き出しに失敗しました');
@@ -724,7 +752,7 @@ export const App: React.FC = () => {
               );
             }
           })
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -753,7 +781,7 @@ export const App: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${fallbackTitle}.mm`;
+        a.download = `${sanitizeDownloadFileName(fallbackTitle)}.mm`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -937,11 +965,37 @@ export const App: React.FC = () => {
     [activeFilePath, openFileInTab, showToast]
   );
 
+  const handleDeleteNodeOrSelection = useCallback(
+    (targetNodeId: string) => {
+      if (effectiveSelectedNodeIds.length > 1 && effectiveSelectedNodeIds.includes(targetNodeId)) {
+        deleteNodes(effectiveSelectedNodeIds);
+      } else {
+        deleteNode(targetNodeId);
+      }
+      setExtraSelectedNodeIds([]);
+    },
+    [effectiveSelectedNodeIds, deleteNodes, deleteNode]
+  );
+
+  const handleToggleFoldSelection = useCallback(
+    (targetNodeId: string, singleOnly = false) => {
+      if (
+        !singleOnly &&
+        effectiveSelectedNodeIds.length > 1 &&
+        effectiveSelectedNodeIds.includes(targetNodeId)
+      ) {
+        toggleFold(effectiveSelectedNodeIds);
+      } else {
+        toggleFold(targetNodeId);
+      }
+    },
+    [effectiveSelectedNodeIds, toggleFold]
+  );
+
   return (
     <div
-      className={`app-container ${isDarkMode ? 'theme-dark' : ''} ${
-        isPresentationActive && isCinemaMode ? 'presentation-cinema' : ''
-      }`}
+      className={`app-container ${isDarkMode ? 'theme-dark' : ''} ${isPresentationActive && isCinemaMode ? 'presentation-cinema' : ''
+        }`}
     >
       {/* Top Toolbar */}
       <Toolbar
@@ -1087,13 +1141,13 @@ export const App: React.FC = () => {
               onCancelEditing={cancelEditing}
               onAddChild={addChildNode}
               onAddSibling={addSiblingNode}
-              onDeleteNode={deleteNode}
+              onDeleteNode={handleDeleteNodeOrSelection}
               onUpdateText={updateNodeText}
               onClearNote={nodeId => {
                 updateNodeProperties(nodeId, { noteHtml: undefined });
                 showToast('ノートを削除しました (Ctrl+Z で元に戻せます)');
               }}
-              onToggleFold={toggleFold}
+              onToggleFold={handleToggleFoldSelection}
               onMoveNode={moveNode}
               onCopyNode={handleCopy}
               onCutNode={handleCut}
@@ -1119,6 +1173,8 @@ export const App: React.FC = () => {
                   } else {
                     setActiveTabId(targetTabId);
                   }
+                } else {
+                  showToast('リンク先のタブが見つかりませんでした');
                 }
               }}
               onOpenFileLink={window.electronAPI ? handleOpenFileLink : undefined}

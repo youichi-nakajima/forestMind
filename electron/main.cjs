@@ -70,6 +70,10 @@ if (!gotLock) {
           });
         } catch (err) {
           console.error('Failed to read file from second-instance:', err);
+          dialog.showErrorBox(
+            'ファイルを開けませんでした',
+            `${fileArg}\n${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     }
@@ -196,6 +200,11 @@ app.whenReady().then(() => {
       return result;
     } catch (err) {
       console.error('Failed to read initial file:', err);
+      dialog.showErrorBox(
+        'ファイルを開けませんでした',
+        `${initialFilePath}\n${err instanceof Error ? err.message : String(err)}`
+      );
+      initialFilePath = null;
       return null;
     }
   });

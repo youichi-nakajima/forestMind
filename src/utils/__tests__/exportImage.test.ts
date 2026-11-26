@@ -55,5 +55,14 @@ describe('exportImage utilities', () => {
     expect(dark.width).toBe(light.width);
     expect(dark.height).toBe(light.height);
   });
+
+  it('renders text extracted from htmlContent when node.text is empty', () => {
+    const richChild = makeNode('c1', '');
+    richChild.htmlContent = '<html><body><p>Rich <b>Label &amp; More</b></p></body></html>';
+    const root = makeNode('root', 'Main', [richChild]);
+
+    const { svg } = buildMindMapSvg(root);
+    expect(svg).toContain('Rich Label &amp; More');
+  });
 });
 

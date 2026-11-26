@@ -63,6 +63,15 @@ export const initialFreeMindMap: FreeMindMap = {
             hooks: [],
             children: [],
           },
+          {
+            id: 'ID_R1_5',
+            text: '右クリック / Shift+F10: コンテキストメニュー & ノードリンクコピー',
+            icons: [],
+            attributes: [],
+            arrowLinks: [],
+            hooks: [],
+            children: [],
+          },
         ],
       },
       {
@@ -156,6 +165,24 @@ export const initialFreeMindMap: FreeMindMap = {
             hooks: [],
             children: [],
           },
+          {
+            id: 'ID_R3_4',
+            text: 'クイック装飾 (1〜6 色 / Alt+1〜9 / Q / Ctrl+クリック複数選択)',
+            icons: [],
+            attributes: [],
+            arrowLinks: [],
+            hooks: [],
+            children: [],
+          },
+          {
+            id: 'ID_R3_5',
+            text: 'フォーカスモード (Ctrl+Shift+F) & フィルタ (Ctrl+Shift+L)',
+            icons: [],
+            attributes: [],
+            arrowLinks: [],
+            hooks: [],
+            children: [],
+          },
         ],
       },
       {
@@ -172,7 +199,7 @@ export const initialFreeMindMap: FreeMindMap = {
         children: [
           {
             id: 'ID_L1_1',
-            text: '複数マップのタブ管理 & 森林俯瞰ビュー',
+            text: '複数マップのタブ管理 (ピン止め / ドラッグ並び替え) & 森林ビュー',
             icons: [],
             attributes: [],
             arrowLinks: [],

@@ -116,12 +116,38 @@ describe('FreeMindSearchEngine (Local Folder Search)', () => {
 
     expect(items).toHaveLength(1);
     expect(items[0].filePath).toBe('C:\\maps\\study\\資格.mm');
+    expect(items[0].xmlContent).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledTimes(1);
 
     const results = executeFreeMindSearch(items, { keyword: '12c' });
     expect(results).toHaveLength(1);
     expect(results[0].filePath).toBe('C:\\maps\\study\\資格.mm');
     warnSpy.mockRestore();
+  });
+
+  it('does not false-match HTML tag names inside noteHtml', () => {
+    const htmlNoteXml = `
+      <map version="1.0.1">
+        <node ID="ID_ROOT" TEXT="Notes">
+          <node ID="ID_N1" TEXT="Item">
+            <richcontent TYPE="NOTE">
+              <html><body><p><strong>Important</strong> task</p></body></html>
+            </richcontent>
+          </node>
+        </node>
+      </map>
+    `;
+    const items = parseScannedRawFiles([
+      {
+        fileName: 'notes.mm',
+        relativePath: '.',
+        xmlContent: htmlNoteXml,
+        fileSize: 200,
+      },
+    ]);
+
+    expect(executeFreeMindSearch(items, { keyword: 'strong' })).toHaveLength(0);
+    expect(executeFreeMindSearch(items, { keyword: 'important' })).toHaveLength(1);
   });
 });
 

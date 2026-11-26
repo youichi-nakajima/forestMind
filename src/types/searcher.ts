@@ -27,7 +27,7 @@ export interface ScannedFileItem {
   filePath?: string;
   fileName: string;
   relativePath: string;
-  xmlContent: string;
+  xmlContent?: string;
   map: FreeMindMap;
   fileSize: number;
 }

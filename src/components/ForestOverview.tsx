@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { MapTab } from '../hooks/useMindMap';
 import { FreeMindNode } from '../types/freemind';
+import { parseForestMindLink } from '../utils/nodeLinks';
+import { getNodePlainText, nodeMatchesKeyword } from '../utils/treeUtils';
 import { Trees, Search, ArrowRight, FileText, GitBranch, ExternalLink, Plus } from 'lucide-react';
 
 interface ForestOverviewProps {
@@ -33,14 +35,22 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
     return tabs.map(tab => {
       let totalNodes = 0;
       let maxDepth = 0;
-      const linkedTabIds = new Set<string>();
+      const linkedTargets = new Set<string>();
+      const selfFilePath = tab.filePath ? tab.filePath.replace(/\\/g, '/').toLowerCase() : null;
 
       function walk(node: FreeMindNode, depth: number) {
         totalNodes++;
         if (depth > maxDepth) maxDepth = depth;
-        if (node.link && node.link.startsWith('forest://')) {
-          const targetTabId = node.link.replace('forest://', '');
-          linkedTabIds.add(targetTabId);
+        if (node.link) {
+          const parsed = parseForestMindLink(node.link);
+          if (parsed.kind === 'forest' && parsed.tabId && parsed.tabId !== tab.id) {
+            linkedTargets.add(`forest:${parsed.tabId}`);
+          } else if (parsed.kind === 'file' && parsed.filePath) {
+            const targetFile = parsed.filePath.replace(/\\/g, '/').toLowerCase();
+            if (!selfFilePath || targetFile !== selfFilePath) {
+              linkedTargets.add(`file:${targetFile}`);
+            }
+          }
         }
         for (const child of node.children) {
           walk(child, depth + 1);
@@ -51,14 +61,14 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
 
       const mainBranches = tab.map.root.children
         .slice(0, 5)
-        .map(c => c.text || '(無題)');
+        .map(c => getNodePlainText(c) || '(無題)');
 
       return {
         tab,
         totalNodes,
         maxDepth,
         mainBranches,
-        linkedTabIds: Array.from(linkedTabIds),
+        linkedTabIds: Array.from(linkedTargets),
       };
     });
   }, [tabs]);
@@ -66,29 +76,23 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
   // Global search across all maps in the forest
   const globalMatches = useMemo(() => {
     if (!globalQuery.trim()) return [];
-    const q = globalQuery.toLowerCase();
     const results: { tabId: string; tabTitle: string; nodeId: string; nodeText: string; path: string }[] = [];
 
     for (const tab of tabs) {
       function searchNode(n: FreeMindNode, ancestors: string[]) {
-        const textMatch = n.text && n.text.toLowerCase().includes(q);
-        const noteMatch = n.noteHtml && n.noteHtml.toLowerCase().includes(q);
-        const attrMatch = n.attributes.some(
-          a => a.name.toLowerCase().includes(q) || a.value.toLowerCase().includes(q)
-        );
-
-        if (textMatch || noteMatch || attrMatch) {
+        const plainText = getNodePlainText(n);
+        if (nodeMatchesKeyword(n, globalQuery)) {
           results.push({
             tabId: tab.id,
             tabTitle: tab.map.root.text || tab.title,
             nodeId: n.id,
-            nodeText: n.text || '(無題ノード)',
+            nodeText: plainText || '(無題ノード)',
             path: ancestors.join(' › '),
           });
         }
 
         for (const c of n.children) {
-          searchNode(c, [...ancestors, n.text || 'Root']);
+          searchNode(c, [...ancestors, plainText || 'Root']);
         }
       }
 

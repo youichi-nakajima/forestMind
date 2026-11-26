@@ -1,6 +1,7 @@
 import { FreeMindNode } from '../types/freemind';
 import { parseFreeMindXml } from '../parser/freemindParser';
 import { NODE_ICONS } from '../utils/quickStyle';
+import { getNodePlainText, nodeMatchesKeyword } from '../utils/treeUtils';
 import {
   FreeMindSearchQuery,
   FreeMindSearchResult,
@@ -26,7 +27,6 @@ function createScannedFileItem(raw: RawScannedMmFile): ScannedFileItem {
     filePath: raw.filePath,
     fileName: raw.fileName,
     relativePath: raw.relativePath,
-    xmlContent: raw.xmlContent,
     map: parseFreeMindXml(raw.xmlContent),
     fileSize: raw.fileSize,
   };
@@ -178,12 +178,15 @@ export function executeFreeMindSearch(
 
   for (const item of scannedFiles) {
     function traverse(node: FreeMindNode, ancestors: string[]) {
+      const nodePlainText = getNodePlainText(node);
+      const ancestorLabel = nodePlainText || '(無題)';
+
       // 1. Icon Filter
       if (query.iconBuiltin) {
         const hasIcon = node.icons.some(i => i.builtin === query.iconBuiltin);
         if (!hasIcon) {
           for (const c of node.children) {
-            traverse(c, [...ancestors, node.text || '(無題)']);
+            traverse(c, [...ancestors, ancestorLabel]);
           }
           return;
         }
@@ -193,46 +196,30 @@ export function executeFreeMindSearch(
       if (fromTime || toTime) {
         if (!node.modified) {
           for (const c of node.children) {
-            traverse(c, [...ancestors, node.text || '(無題)']);
+            traverse(c, [...ancestors, ancestorLabel]);
           }
           return;
         }
         if (fromTime && node.modified < fromTime) {
           for (const c of node.children) {
-            traverse(c, [...ancestors, node.text || '(無題)']);
+            traverse(c, [...ancestors, ancestorLabel]);
           }
           return;
         }
         if (toTime && node.modified > toTime) {
           for (const c of node.children) {
-            traverse(c, [...ancestors, node.text || '(無題)']);
+            traverse(c, [...ancestors, ancestorLabel]);
           }
           return;
         }
       }
 
       // 3. Keyword Match
-      let isMatch = false;
-      if (!keywordLower) {
-        // If no keyword, matches everything satisfying icon & date filters
-        isMatch = true;
-      } else {
-        const textTarget = (node.text || '').toLowerCase();
-        const linkTarget = (node.link || '').toLowerCase();
-        const noteTarget = (node.noteHtml || '').toLowerCase();
-
-        if (
-          textTarget.includes(keywordLower) ||
-          linkTarget.includes(keywordLower) ||
-          noteTarget.includes(keywordLower)
-        ) {
-          isMatch = true;
-        }
-      }
+      const isMatch = nodeMatchesKeyword(node, keywordLower);
 
       if (isMatch) {
         const cleanAncestors = ancestors.filter(a => a.trim() !== '');
-        const currentText = node.text || (node.htmlContent ? 'Rich Content' : '(無題ノード)');
+        const currentText = nodePlainText || '(無題ノード)';
         const breadcrumbPath = [...cleanAncestors, currentText].join(' > ');
 
         results.push({
@@ -253,7 +240,7 @@ export function executeFreeMindSearch(
 
       // Recursively search children
       for (const c of node.children) {
-        traverse(c, [...ancestors, node.text || '(無題)']);
+        traverse(c, [...ancestors, ancestorLabel]);
       }
     }
 

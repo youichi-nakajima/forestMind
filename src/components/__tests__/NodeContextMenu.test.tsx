@@ -99,6 +99,24 @@ describe('NodeContextMenu', () => {
     expect(findItem('このノードへのリンクをコピー')?.disabled).toBe(false);
   });
 
+  it('keeps Cut, Duplicate, and Delete enabled when multi-selection includes non-root nodes', async () => {
+    await renderMenu({
+      isTrueMapRoot: true,
+      selectedCount: 2,
+      canModifySelection: true,
+    });
+
+    const findItem = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')).find(
+        btn => btn.textContent?.includes(label)
+      );
+
+    expect(findItem('兄弟ノードを追加')?.disabled).toBe(true);
+    expect(findItem('カット')?.disabled).toBe(false);
+    expect(findItem('複製')?.disabled).toBe(false);
+    expect(findItem('削除')?.disabled).toBe(false);
+  });
+
   it('closes on Escape key and outside mousedown', async () => {
     const props = await renderMenu();
 

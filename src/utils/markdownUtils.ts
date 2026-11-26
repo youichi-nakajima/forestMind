@@ -1,13 +1,14 @@
 import { FreeMindNode, NodePosition } from '../types/freemind';
 import { generateNodeId } from '../parser/freemindParser';
 import { noteHtmlToPlainText } from './noteRenderer';
+import { getNodePlainText } from './treeUtils';
 
 /**
  * Serializes a node and its descendants into Markdown outline text
  */
 export function serializeSubtreeToMarkdown(node: FreeMindNode, depth = 0): string {
   const indent = '  '.repeat(depth);
-  const text = node.text || (node.htmlContent ? node.htmlContent.replace(/<[^>]+>/g, '').trim() : 'Node');
+  const text = getNodePlainText(node) || 'Node';
   const lines: string[] = [`${indent}- ${text}`];
 
   if (node.noteHtml) {

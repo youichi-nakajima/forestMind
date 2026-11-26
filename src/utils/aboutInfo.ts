@@ -2,7 +2,7 @@ import type { ElectronAppInfo } from '../types/electron';
 
 export const APP_INFO = {
   name: 'forestMind',
-  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.4.0',
+  version: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.4.1',
   compatBadge: 'FreeMind 1.0.1 互換',
   description:
     '複数のマップを「森（Forest）」として管理・検索・リンクし、思考の成長過程をアニメーションと音で再生できるマインドマップエディタです。',

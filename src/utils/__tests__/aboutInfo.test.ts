@@ -9,7 +9,7 @@ import {
 describe('aboutInfo', () => {
   it('exposes expected application metadata and HTTPS links including Buy Me a Coffee', () => {
     expect(APP_INFO.name).toBe('forestMind');
-    expect(APP_INFO.version).toBe('1.4.0');
+    expect(APP_INFO.version).toBe('1.4.1');
     expect(APP_INFO.license).toBe('MIT License');
     expect(APP_INFO.links.buyMeACoffee).toBe('https://buymeacoffee.com/youichinakq');
     for (const url of Object.values(APP_INFO.links)) {

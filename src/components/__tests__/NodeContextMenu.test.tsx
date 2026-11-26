@@ -130,4 +130,48 @@ describe('NodeContextMenu', () => {
     });
     expect(props.onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('renders split and merge menu items and disables split only on true map root', async () => {
+    const onSplitBranch = vi.fn();
+    const onMergeMap = vi.fn();
+    await renderMenu({ isTrueMapRoot: true, onSplitBranch, onMergeMap });
+
+    const findItem = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')).find(
+        btn => btn.textContent?.includes(label)
+      );
+
+    expect(findItem('別マップへ株分け (.mm)…')?.disabled).toBe(true);
+    expect(findItem('別マップをここへ合流…')?.disabled).toBe(false);
+
+    await act(async () => {
+      findItem('別マップをここへ合流…')?.click();
+    });
+    expect(onMergeMap).toHaveBeenCalledTimes(1);
+
+    await renderMenu({ isTrueMapRoot: false, onSplitBranch, onMergeMap });
+    expect(findItem('別マップへ株分け (.mm)…')?.disabled).toBe(false);
+    await act(async () => {
+      findItem('別マップへ株分け (.mm)…')?.click();
+    });
+    expect(onSplitBranch).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders portal preview toggle item and reflects expanded state', async () => {
+    const onTogglePortal = vi.fn();
+    await renderMenu({ onTogglePortal, isPortalExpanded: false });
+
+    const findItem = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')).find(
+        btn => btn.textContent?.includes(label)
+      );
+
+    await act(async () => {
+      findItem('ポータル参照を展開')?.click();
+    });
+    expect(onTogglePortal).toHaveBeenCalledTimes(1);
+
+    await renderMenu({ onTogglePortal, isPortalExpanded: true });
+    expect(findItem('ポータル展開を閉じる')).toBeTruthy();
+  });
 });

@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('dialog:saveMmFile', defaultName, content, baseFilePath),
   pickTargetMmFile: baseFilePath => ipcRenderer.invoke('dialog:pickTargetMmFile', baseFilePath),
   scanMmFolder: () => ipcRenderer.invoke('dialog:scanMmFolder'),
+  getWorkspaceState: () => ipcRenderer.invoke('workspace:getState'),
+  removeRecentFile: filePath => ipcRenderer.invoke('workspace:removeRecentFile', filePath),
+  clearRecentFiles: () => ipcRenderer.invoke('workspace:clearRecentFiles'),
+  pickForestFolder: () => ipcRenderer.invoke('workspace:pickForestFolder'),
+  addForestFolder: folderPath => ipcRenderer.invoke('workspace:addForestFolder', folderPath),
+  removeForestFolder: folderPath => ipcRenderer.invoke('workspace:removeForestFolder', folderPath),
+  scanMmFolderByPath: folderPath => ipcRenderer.invoke('workspace:scanFolderByPath', folderPath),
   confirmUnsaved: title => ipcRenderer.invoke('dialog:confirmUnsaved', title),
   onRequestClose: callback => {
     const listener = () => callback();
@@ -25,4 +32,3 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   confirmAppClose: () => ipcRenderer.send('app:confirmClose'),
 });
-

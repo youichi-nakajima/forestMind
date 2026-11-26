@@ -5,6 +5,9 @@ import {
   Copy,
   CopyPlus,
   Focus,
+  GitFork,
+  GitMerge,
+  Layers,
   Link2,
   Palette,
   Pencil,
@@ -45,13 +48,17 @@ interface NodeContextMenuProps {
   onToggleFocus: () => void;
   onOpenQuickPalette: () => void;
   onOpenProperties: () => void;
+  onSplitBranch?: () => void;
+  onMergeMap?: () => void;
+  onTogglePortal?: () => void;
+  isPortalExpanded?: boolean;
   onDelete: () => void;
   extraItems?: NodeContextMenuExtraItem[];
   onClose: () => void;
 }
 
 const FALLBACK_MENU_WIDTH = 252;
-const FALLBACK_MENU_HEIGHT = 430;
+const FALLBACK_MENU_HEIGHT = 530;
 const VIEWPORT_MARGIN = 8;
 
 function clampMenuPosition(
@@ -92,6 +99,10 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   onToggleFocus,
   onOpenQuickPalette,
   onOpenProperties,
+  onSplitBranch,
+  onMergeMap,
+  onTogglePortal,
+  isPortalExpanded = false,
   onDelete,
   extraItems,
   onClose,
@@ -310,6 +321,48 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
         <SlidersHorizontal size={14} className="context-menu-icon" />
         <span className="context-menu-label">プロパティを表示</span>
       </button>
+
+      {(onSplitBranch || onMergeMap || onTogglePortal) && (
+        <>
+          <div className="context-menu-divider" role="separator" />
+          {onTogglePortal && (
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
+              onClick={() => runAction(onTogglePortal)}
+            >
+              <Layers size={14} className="context-menu-icon" />
+              <span className="context-menu-label">
+                {isPortalExpanded ? 'ポータル展開を閉じる' : 'ポータル参照を展開'}
+              </span>
+            </button>
+          )}
+          {onSplitBranch && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={isTrueMapRoot}
+              className="context-menu-item"
+              onClick={() => runAction(onSplitBranch)}
+            >
+              <GitFork size={14} className="context-menu-icon" />
+              <span className="context-menu-label">別マップへ株分け (.mm)…</span>
+            </button>
+          )}
+          {onMergeMap && (
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
+              onClick={() => runAction(onMergeMap)}
+            >
+              <GitMerge size={14} className="context-menu-icon" />
+              <span className="context-menu-label">別マップをここへ合流…</span>
+            </button>
+          )}
+        </>
+      )}
 
       {extraItems && extraItems.length > 0 && (
         <>

@@ -1,9 +1,10 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   FreeMindSearchQuery,
   FreeMindSearchResult,
   ScannedFileItem,
 } from '../types/searcher';
+import type { ForestFolderEntry } from '../types/workspace';
 import {
   scanDirectoryHandle,
   scanFileList,
@@ -13,6 +14,7 @@ import {
   SEARCH_ICON_MAP,
   SEARCH_ICON_OPTIONS,
 } from '../services/freeMindSearchEngine';
+import { normalizeWorkspacePathKey } from '../utils/workspaceStorage';
 import {
   Search,
   FolderSearch,
@@ -26,6 +28,8 @@ import {
   CheckCircle2,
   Loader2,
   Folder,
+  Star,
+  History,
 } from 'lucide-react';
 import { FreeMindMap } from '../types/freemind';
 
@@ -33,6 +37,12 @@ interface FreeMindSearcherModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenMapNode: (map: FreeMindMap, title: string, nodeId: string, filePath?: string) => void;
+  forestFolders?: ForestFolderEntry[];
+  lastScannedFolder?: string;
+  initialFolderToScan?: string | null;
+  onConsumedInitialFolder?: () => void;
+  onFolderScanned?: (rootDir: string, dirName: string) => void;
+  onRegisterForestFolder?: (folderPath: string, name: string) => void;
 }
 
 type SortField = 'fileName' | 'relativePath' | 'breadcrumbPath' | 'nodeText' | 'modifiedTime';
@@ -47,10 +57,17 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
   isOpen,
   onClose,
   onOpenMapNode,
+  forestFolders = [],
+  lastScannedFolder,
+  initialFolderToScan,
+  onConsumedInitialFolder,
+  onFolderScanned,
+  onRegisterForestFolder,
 }) => {
   // Scanned files state
   const [scannedFiles, setScannedFiles] = useState<ScannedFileItem[]>([]);
   const [scannedDirName, setScannedDirName] = useState<string>('');
+  const [scannedRootDir, setScannedRootDir] = useState<string>('');
   const [hasScanned, setHasScanned] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<{ count: number; current: string }>({
@@ -91,6 +108,45 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
     return executeFreeMindSearch(scannedFiles, query);
   }, [scannedFiles, query]);
 
+  const scanKnownElectronFolder = useCallback(
+    async (folderPath: string) => {
+      const scanMmFolderByPath = window.electronAPI?.scanMmFolderByPath;
+      if (!scanMmFolderByPath) return;
+      setIsScanning(true);
+      setScanProgress({ count: 0, current: 'フォルダをスキャン中...' });
+      try {
+        const res = await scanMmFolderByPath(folderPath);
+        if (!res.ok) {
+          alert('フォルダのスキャンに失敗しました: ' + res.error);
+          return;
+        }
+        setScannedDirName(res.result.dirName);
+        setScannedRootDir(res.result.rootDir);
+        const items = parseScannedRawFiles(res.result.files, (count, current) => {
+          setScanProgress({ count, current });
+        });
+        setScannedFiles(items);
+        setHasScanned(true);
+        onFolderScanned?.(res.result.rootDir, res.result.dirName);
+      } catch (err: unknown) {
+        console.error('Electron Known Folder Scan Error:', err);
+        const message = err instanceof Error ? err.message : String(err);
+        alert('フォルダのスキャンに失敗しました: ' + message);
+      } finally {
+        setIsScanning(false);
+      }
+    },
+    [onFolderScanned]
+  );
+
+  useEffect(() => {
+    if (!isOpen || !initialFolderToScan) return;
+    onConsumedInitialFolder?.();
+    if (window.electronAPI?.scanMmFolderByPath) {
+      void scanKnownElectronFolder(initialFolderToScan);
+    }
+  }, [isOpen, initialFolderToScan, onConsumedInitialFolder, scanKnownElectronFolder]);
+
   // Folder scanning via Electron native dialog or File System Access API
   const handlePickDirectory = async () => {
     const scanMmFolder = window.electronAPI?.scanMmFolder;
@@ -103,11 +159,13 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
           return;
         }
         setScannedDirName(scanned.dirName);
+        setScannedRootDir(scanned.rootDir);
         const items = parseScannedRawFiles(scanned.files, (count, current) => {
           setScanProgress({ count, current });
         });
         setScannedFiles(items);
         setHasScanned(true);
+        onFolderScanned?.(scanned.rootDir, scanned.dirName);
       } catch (err: unknown) {
         console.error('Electron Folder Scan Error:', err);
         const message = err instanceof Error ? err.message : String(err);
@@ -122,6 +180,7 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
       try {
         const dirHandle = await (window as WindowWithDirectoryPicker).showDirectoryPicker();
         setScannedDirName(dirHandle.name);
+        setScannedRootDir('');
         setIsScanning(true);
         setScanProgress({ count: 0, current: '探索開始...' });
 
@@ -156,6 +215,7 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
 
     setIsScanning(true);
     setScannedDirName(dirLabel);
+    setScannedRootDir('');
     setScanProgress({ count: 0, current: '探索中...' });
 
     try {
@@ -231,6 +291,20 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const isScannedFolderRegistered = useMemo(() => {
+    if (!scannedRootDir) return false;
+    const key = normalizeWorkspacePathKey(scannedRootDir);
+    return forestFolders.some(f => normalizeWorkspacePathKey(f.folderPath) === key);
+  }, [scannedRootDir, forestFolders]);
+
+  const showLastScannedChip = useMemo(() => {
+    if (!lastScannedFolder) return false;
+    const key = normalizeWorkspacePathKey(lastScannedFolder);
+    return !forestFolders.some(f => normalizeWorkspacePathKey(f.folderPath) === key);
+  }, [lastScannedFolder, forestFolders]);
+
+  const canQuickScanInElectron = Boolean(window.electronAPI?.scanMmFolderByPath);
+
   if (!isOpen) return null;
 
   return (
@@ -287,14 +361,62 @@ export const FreeMindSearcherModal: React.FC<FreeMindSearcherModalProps> = ({
             )}
 
             {!isScanning && hasScanned && (
-              <div className="scanned-info-pill">
-                <CheckCircle2 size={14} className="success-icon" />
-                <span>
-                  <strong>{scannedDirName}</strong> 配下の <strong>{scannedFiles.length}</strong> ファイルをスキャン済み
-                </span>
-              </div>
+              <>
+                <div className="scanned-info-pill">
+                  <CheckCircle2 size={14} className="success-icon" />
+                  <span>
+                    <strong>{scannedDirName}</strong> 配下の <strong>{scannedFiles.length}</strong> ファイルをスキャン済み
+                  </span>
+                </div>
+                {scannedRootDir && onRegisterForestFolder && !isScannedFolderRegistered && (
+                  <button
+                    type="button"
+                    className="toolbar-btn searcher-register-folder-btn"
+                    title="このフォルダを森フォルダに登録"
+                    onClick={() => onRegisterForestFolder(scannedRootDir, scannedDirName)}
+                  >
+                    <Star size={14} />
+                    <span>森フォルダに登録</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
+
+          {/* Registered Forest Folders & Last Scanned Folder Quick Strip */}
+          {canQuickScanInElectron && (forestFolders.length > 0 || showLastScannedChip) && (
+            <div className="searcher-workspace-strip">
+              {forestFolders.map(folder => (
+                <button
+                  key={folder.folderPath}
+                  type="button"
+                  disabled={isScanning}
+                  className="searcher-workspace-chip"
+                  title={folder.folderPath}
+                  onClick={() => void scanKnownElectronFolder(folder.folderPath)}
+                >
+                  <Folder size={12} />
+                  <span>{folder.name}</span>
+                </button>
+              ))}
+              {showLastScannedChip && lastScannedFolder && (
+                <button
+                  type="button"
+                  disabled={isScanning}
+                  className="searcher-workspace-chip secondary"
+                  title={lastScannedFolder}
+                  onClick={() => void scanKnownElectronFolder(lastScannedFolder)}
+                >
+                  <History size={12} />
+                  <span>
+                    前回のフォルダ:{' '}
+                    {lastScannedFolder.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ||
+                      lastScannedFolder}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Search Query Form */}
           <form className="searcher-filter-card" onSubmit={handleSearch}>

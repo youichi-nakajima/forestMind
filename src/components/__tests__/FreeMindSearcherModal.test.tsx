@@ -187,4 +187,87 @@ describe('FreeMindSearcherModal', () => {
     );
     expect(container.textContent).not.toContain('PC上のマインドマップ保管フォルダを選択してください');
   });
+
+  it('scans a registered Forest Folder in 1 click via scanMmFolderByPath and allows registering scanned folder', async () => {
+    const sampleXml = `
+      <map version="1.0.1">
+        <node ID="ID_ROOT" TEXT="Workspace Map">
+          <node ID="ID_CHILD" TEXT="Sub Idea"/>
+        </node>
+      </map>
+    `;
+    const scanMmFolderByPath = vi.fn().mockResolvedValue({
+      ok: true,
+      result: {
+        rootDir: 'C:\\Users\\demo\\forest',
+        dirName: 'forest',
+        files: [
+          {
+            filePath: 'C:\\Users\\demo\\forest\\idea.mm',
+            fileName: 'idea.mm',
+            relativePath: '.',
+            xmlContent: sampleXml,
+            fileSize: sampleXml.length,
+          },
+        ],
+      },
+      state: {
+        recentFiles: [],
+        forestFolders: [{ folderPath: 'C:\\Users\\demo\\forest', name: 'forest', addedAt: 1 }],
+        lastScannedFolder: 'C:\\Users\\demo\\forest',
+      },
+    });
+    const scanMmFolder = vi.fn().mockResolvedValue({
+      rootDir: 'C:\\Users\\demo\\other',
+      dirName: 'other',
+      files: [
+        {
+          filePath: 'C:\\Users\\demo\\other\\note.mm',
+          fileName: 'note.mm',
+          relativePath: '.',
+          xmlContent: sampleXml,
+          fileSize: sampleXml.length,
+        },
+      ],
+    });
+    window.electronAPI = createElectronMock({ scanMmFolder, scanMmFolderByPath });
+    const onRegisterForestFolder = vi.fn();
+
+    await renderModal({
+      forestFolders: [{ folderPath: 'C:\\Users\\demo\\forest', name: 'forest', addedAt: 1 }],
+      onRegisterForestFolder,
+    });
+
+    const folderChip = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button.searcher-workspace-chip')
+    ).find(btn => btn.textContent?.includes('forest'));
+    expect(folderChip).toBeDefined();
+
+    await act(async () => {
+      folderChip!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(scanMmFolderByPath).toHaveBeenCalledWith('C:\\Users\\demo\\forest');
+    expect(container.querySelectorAll('tbody tr.searcher-row')).toHaveLength(2);
+    // Already registered, so the "森フォルダに登録" button should be hidden
+    expect(container.querySelector('button.searcher-register-folder-btn')).toBeNull();
+
+    const rescanBtn = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(btn =>
+      btn.textContent?.includes('フォルダを再選択')
+    );
+    await act(async () => {
+      rescanBtn!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const registerBtn = container.querySelector<HTMLButtonElement>('button.searcher-register-folder-btn');
+    expect(registerBtn).not.toBeNull();
+    await act(async () => {
+      registerBtn!.click();
+    });
+    expect(onRegisterForestFolder).toHaveBeenCalledWith('C:\\Users\\demo\\other', 'other');
+  });
 });

@@ -31,6 +31,7 @@ describe('FocusBreadcrumbBar', () => {
     }
     const onSelectBreadcrumb = vi.fn();
     const onExitFocus = vi.fn();
+    const onSplitFocusedBranch = vi.fn();
 
     await act(async () => {
       root!.render(
@@ -42,6 +43,7 @@ describe('FocusBreadcrumbBar', () => {
           ]}
           onSelectBreadcrumb={onSelectBreadcrumb}
           onExitFocus={onExitFocus}
+          onSplitFocusedBranch={onSplitFocusedBranch}
         />
       );
     });
@@ -60,7 +62,9 @@ describe('FocusBreadcrumbBar', () => {
     await act(async () => {
       crumbBtns[0].click();
       container.querySelector<HTMLButtonElement>('button.focus-exit-btn')?.click();
+      container.querySelector<HTMLButtonElement>('button.focus-split-btn')?.click();
     });
     expect(onExitFocus).toHaveBeenCalledTimes(2);
+    expect(onSplitFocusedBranch).toHaveBeenCalledTimes(1);
   });
 });

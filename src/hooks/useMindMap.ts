@@ -23,6 +23,7 @@ import {
   pruneTopLevelTargetNodes,
   setSubtreePosition,
 } from '../utils/treeUtils';
+import { applySplitToSourceTree, prepareMergedSubtree } from '../utils/branchOperations';
 
 let tabIdCounter = 0;
 
@@ -198,9 +199,10 @@ export function useMindMap() {
       title?: string,
       filePath?: string,
       initialDirty: boolean = false,
-      initialSelectedNodeId?: string
-    ) => {
-      const newId = `tab_${Date.now()}_${++tabIdCounter}`;
+      initialSelectedNodeId?: string,
+      customTabId?: string
+    ): string => {
+      const newId = customTabId || `tab_${Date.now()}_${++tabIdCounter}`;
       const newMap: FreeMindMap = customMap || {
         version: '1.0.1',
         root: {
@@ -239,6 +241,7 @@ export function useMindMap() {
       setActiveTabId(newId);
       pendingNewNodeRef.current = null;
       setEditingNodeIdRaw(null);
+      return newId;
     },
     []
   );
@@ -1350,6 +1353,61 @@ export function useMindMap() {
     setActiveTabId(id);
   }, []);
 
+  const applySplitLinkToNode = useCallback(
+    (branchNodeId: string, linkValue: string, collapseToLinkNode: boolean): boolean => {
+      const currentTab = tabsRef.current.find(t => t.id === activeTabId) || tabsRef.current[0];
+      if (!currentTab) return false;
+      const clonedMap = cloneMindMap(currentTab.map);
+      const changed = applySplitToSourceTree(clonedMap.root, branchNodeId, linkValue, {
+        collapseToLinkNode,
+      });
+      if (!changed) return false;
+      pushHistory(clonedMap);
+      setSelectedNodeId(branchNodeId);
+      return true;
+    },
+    [activeTabId, pushHistory, setSelectedNodeId]
+  );
+
+  const mergeMapIntoNode = useCallback(
+    (
+      targetParentId: string,
+      sourceMap: FreeMindMap,
+      includeSourceRoot: boolean
+    ): boolean => {
+      const currentTab = tabsRef.current.find(t => t.id === activeTabId) || tabsRef.current[0];
+      if (!currentTab) return false;
+      const clonedMap = cloneMindMap(currentTab.map);
+      const targetParent = findNode(clonedMap.root, targetParentId);
+      if (!targetParent) return false;
+
+      const nodesToInsert = prepareMergedSubtree(sourceMap, { includeSourceRoot });
+      if (nodesToInsert.length === 0) return false;
+
+      const isRoot = targetParent.id === clonedMap.root.id;
+      const rightCount = targetParent.children.filter(c => c.position !== 'left').length;
+      const leftCount = targetParent.children.filter(c => c.position === 'left').length;
+      let nextSide: NodePosition = rightCount <= leftCount ? 'right' : 'left';
+
+      for (const nodeToInsert of nodesToInsert) {
+        if (isRoot) {
+          setSubtreePosition(nodeToInsert, nextSide);
+          nextSide = nextSide === 'right' ? 'left' : 'right';
+        } else if (targetParent.position) {
+          setSubtreePosition(nodeToInsert, targetParent.position);
+        }
+        targetParent.children.push(nodeToInsert);
+      }
+
+      targetParent.folded = false;
+      targetParent.modified = Date.now();
+      pushHistory(clonedMap);
+      setSelectedNodeId(nodesToInsert[0].id);
+      return true;
+    },
+    [activeTabId, pushHistory, setSelectedNodeId]
+  );
+
   return {
     tabs,
     activeTabId,
@@ -1406,6 +1464,8 @@ export function useMindMap() {
     handlePrevSearch,
     revealAndSelectNode,
     openMapAndSelectNode,
+    applySplitLinkToNode,
+    mergeMapIntoNode,
   };
 }
 

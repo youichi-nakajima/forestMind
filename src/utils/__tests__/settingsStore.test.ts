@@ -4,9 +4,34 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+interface RecentFileEntry {
+  filePath: string;
+  fileName: string;
+  lastOpenedAt: number;
+}
+
+interface ForestFolderEntry {
+  folderPath: string;
+  name: string;
+  addedAt: number;
+}
+
+interface WorkspaceState {
+  recentFiles: RecentFileEntry[];
+  forestFolders: ForestFolderEntry[];
+  lastScannedFolder?: string;
+}
+
 interface SettingsStore {
   getLastUsedDir: () => string | undefined;
   saveLastUsedDir: (dirPath: string) => void;
+  getWorkspaceState: () => WorkspaceState;
+  addRecentFile: (filePath: string) => WorkspaceState;
+  removeRecentFile: (filePath: string) => WorkspaceState;
+  clearRecentFiles: () => WorkspaceState;
+  addForestFolder: (folderPath: string) => WorkspaceState;
+  removeForestFolder: (folderPath: string) => WorkspaceState;
+  saveLastScannedFolder: (folderPath: string) => WorkspaceState;
 }
 
 interface SettingsStoreModule {
@@ -114,6 +139,69 @@ describe('electron settingsStore', () => {
     expect(
       resolveSaveDefaultPath('project.mm', undefined, 'C:\\last')
     ).toBe(path.join('C:\\last', 'project.mm'));
+  });
+
+  it('adds, deduplicates, caps at 15, removes, and clears recentFiles', () => {
+    const store = createSettingsStore(settingsFile);
+    const dir = path.join(tempRoot, 'maps');
+    fs.mkdirSync(dir, { recursive: true });
+
+    const fileA = path.join(dir, 'alpha.mm');
+    const fileB = path.join(dir, 'beta.mm');
+    store.addRecentFile(fileA);
+    store.addRecentFile(fileB);
+    store.addRecentFile(fileA);
+
+    let ws = store.getWorkspaceState();
+    expect(ws.recentFiles.map(f => f.fileName)).toEqual(['alpha.mm', 'beta.mm']);
+
+    for (let i = 0; i < 18; i++) {
+      store.addRecentFile(path.join(dir, `item_${i}.mm`));
+    }
+    ws = store.getWorkspaceState();
+    expect(ws.recentFiles).toHaveLength(15);
+    expect(ws.recentFiles[0].fileName).toBe('item_17.mm');
+
+    ws = store.removeRecentFile(path.join(dir, 'item_17.mm'));
+    expect(ws.recentFiles).toHaveLength(14);
+
+    ws = store.clearRecentFiles();
+    expect(ws.recentFiles).toEqual([]);
+  });
+
+  it('adds, deduplicates, caps at 12, removes forestFolders and saves lastScannedFolder', () => {
+    const store = createSettingsStore(settingsFile);
+    const missingDir = path.join(tempRoot, 'missing-ws');
+    const dir1 = path.join(tempRoot, 'ws1');
+    const dir2 = path.join(tempRoot, 'ws2');
+    fs.mkdirSync(dir1, { recursive: true });
+    fs.mkdirSync(dir2, { recursive: true });
+
+    // Missing directory is ignored
+    expect(store.addForestFolder(missingDir).forestFolders).toEqual([]);
+    expect(store.saveLastScannedFolder(missingDir).lastScannedFolder).toBeUndefined();
+
+    store.addForestFolder(dir1);
+    store.addForestFolder(dir2);
+    store.addForestFolder(dir1);
+
+    let ws = store.getWorkspaceState();
+    expect(ws.forestFolders.map(f => f.name)).toEqual(['ws1', 'ws2']);
+
+    for (let i = 0; i < 14; i++) {
+      const d = path.join(tempRoot, `extra_${i}`);
+      fs.mkdirSync(d, { recursive: true });
+      store.addForestFolder(d);
+    }
+    ws = store.getWorkspaceState();
+    expect(ws.forestFolders).toHaveLength(12);
+
+    ws = store.removeForestFolder(path.join(tempRoot, 'extra_13'));
+    expect(ws.forestFolders).toHaveLength(11);
+
+    ws = store.saveLastScannedFolder(dir2);
+    expect(ws.lastScannedFolder).toBe(path.normalize(dir2));
+    expect(store.getLastUsedDir()).toBe(path.normalize(dir2));
   });
 });
 

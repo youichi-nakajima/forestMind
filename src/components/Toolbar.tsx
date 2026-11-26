@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FolderOpen,
   Download,
@@ -22,7 +22,10 @@ import {
   Palette,
   Filter,
   Focus,
+  Clock,
+  X,
 } from 'lucide-react';
+import type { RecentFileEntry } from '../types/workspace';
 
 interface ToolbarProps {
   isForestViewOpen?: boolean;
@@ -65,6 +68,18 @@ interface ToolbarProps {
   isFilterBarOpen?: boolean;
   activeFilterCount?: number;
   onToggleFilterBar?: () => void;
+  recentFiles?: RecentFileEntry[];
+  onOpenRecentFile?: (filePath: string) => void;
+  onRemoveRecentFile?: (filePath: string) => void;
+  onClearRecentFiles?: () => void;
+}
+
+function formatParentDir(filePath: string): string {
+  const parts = filePath.split(/[\\/]/);
+  if (parts.length <= 1) return '';
+  parts.pop();
+  const dir = parts.join('/');
+  return dir.length > 42 ? `.../${parts.slice(-2).join('/')}` : dir;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -108,10 +123,55 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isFilterBarOpen = false,
   activeFilterCount = 0,
   onToggleFilterBar,
+  recentFiles = [],
+  onOpenRecentFile,
+  onRemoveRecentFile,
+  onClearRecentFiles,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const openDropdownRef = useRef<HTMLDivElement>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showRecentMenu, setShowRecentMenu] = useState(false);
+
+  useEffect(() => {
+    if (!showExportMenu && !showRecentMenu) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (
+        showExportMenu &&
+        exportDropdownRef.current &&
+        target &&
+        !exportDropdownRef.current.contains(target)
+      ) {
+        setShowExportMenu(false);
+      }
+      if (
+        showRecentMenu &&
+        openDropdownRef.current &&
+        target &&
+        !openDropdownRef.current.contains(target)
+      ) {
+        setShowRecentMenu(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowExportMenu(false);
+        setShowRecentMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showExportMenu, showRecentMenu]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -149,6 +209,106 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     </button>
   );
 
+  const renderOpenControl = (openLabel: string, openTitle: string) => {
+    const hasRecent = Boolean(onOpenRecentFile && recentFiles.length > 0);
+    return (
+      <div ref={openDropdownRef} className="open-dropdown-wrapper">
+        <button
+          type="button"
+          className="toolbar-btn"
+          title={openTitle}
+          onClick={() => {
+            setShowRecentMenu(false);
+            setShowExportMenu(false);
+            if (onOpenFileDialog) {
+              onOpenFileDialog();
+            } else {
+              fileInputRef.current?.click();
+            }
+          }}
+        >
+          <FolderOpen size={16} />
+          <span>{openLabel}</span>
+        </button>
+
+        {hasRecent && (
+          <button
+            type="button"
+            className={`toolbar-btn icon-only open-recent-toggle-btn ${showRecentMenu ? 'active' : ''}`}
+            title="最近使ったファイル"
+            aria-label="最近使ったファイル"
+            aria-expanded={showRecentMenu}
+            onClick={() => {
+              setShowRecentMenu(prev => !prev);
+              setShowExportMenu(false);
+            }}
+          >
+            <ChevronDown size={13} />
+          </button>
+        )}
+
+        {showRecentMenu && hasRecent && (
+          <div className="recent-files-menu" role="menu" aria-label="最近使ったファイル">
+            <div className="recent-files-header">
+              <span className="recent-files-heading">
+                <Clock size={12} />
+                <span>最近使ったファイル</span>
+              </span>
+              {onClearRecentFiles && (
+                <button
+                  type="button"
+                  className="recent-files-clear-btn"
+                  onClick={() => {
+                    onClearRecentFiles();
+                    setShowRecentMenu(false);
+                  }}
+                >
+                  クリア
+                </button>
+              )}
+            </div>
+            <div className="recent-files-list">
+              {recentFiles.map(entry => {
+                const parentDir = formatParentDir(entry.filePath);
+                return (
+                  <div key={entry.filePath} className="recent-file-row">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="recent-file-item"
+                      title={entry.filePath}
+                      onClick={() => {
+                        setShowRecentMenu(false);
+                        onOpenRecentFile?.(entry.filePath);
+                      }}
+                    >
+                      <strong className="recent-file-name">{entry.fileName}</strong>
+                      {parentDir && <span className="recent-file-dir">{parentDir}</span>}
+                    </button>
+                    {onRemoveRecentFile && (
+                      <button
+                        type="button"
+                        className="recent-file-remove-btn"
+                        title="履歴から除外"
+                        aria-label={`${entry.fileName} を履歴から除外`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          onRemoveRecentFile(entry.filePath);
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // =========================================================================
   // Mode A: Forest Overview Toolbar (森林ビュー専用ツールバー)
   // =========================================================================
@@ -179,14 +339,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
-          <button
-            className="toolbar-btn"
-            title="FreeMind (.mm) または Markdown (.md) ファイルを開いて森林に追加"
-            onClick={() => (onOpenFileDialog ? onOpenFileDialog() : fileInputRef.current?.click())}
-          >
-            <FolderOpen size={16} />
-            <span>ファイルを開く</span>
-          </button>
+          {renderOpenControl(
+            'ファイルを開く',
+            'FreeMind (.mm) または Markdown (.md) ファイルを開いて森林に追加'
+          )}
 
           <button
             className="toolbar-btn searcher-trigger-btn"
@@ -254,20 +410,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
-        <button
-          className="toolbar-btn"
-          title="FreeMind (.mm) または Markdown (.md) ファイルを開く"
-          onClick={() => (onOpenFileDialog ? onOpenFileDialog() : fileInputRef.current?.click())}
-        >
-          <FolderOpen size={16} />
-          <span>開く</span>
-        </button>
+        {renderOpenControl('開く', 'FreeMind (.mm) または Markdown (.md) ファイルを開く')}
 
-        <div className="export-dropdown-wrapper">
+        <div ref={exportDropdownRef} className="export-dropdown-wrapper">
           <button
             className="toolbar-btn"
             title="エクスポート形式を選択"
-            onClick={() => setShowExportMenu(prev => !prev)}
+            onClick={() => {
+              setShowExportMenu(prev => !prev);
+              setShowRecentMenu(false);
+            }}
           >
             <Download size={16} />
             <span>保存 ▾</span>

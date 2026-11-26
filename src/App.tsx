@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMindMap } from './hooks/useMindMap';
 import { usePresentationPlayback } from './hooks/usePresentationPlayback';
+import { useWorkspace } from './hooks/useWorkspace';
 import { TabBar } from './components/TabBar';
 import { Toolbar } from './components/Toolbar';
 import { MindMapCanvas } from './components/MindMapCanvas';
@@ -13,14 +14,24 @@ import { QuickStylePalette } from './components/QuickStylePalette';
 import { FreeMindSearcherModal } from './components/FreeMindSearcherModal';
 import { FocusBreadcrumbBar } from './components/FocusBreadcrumbBar';
 import { MapFilterBar } from './components/MapFilterBar';
+import { BranchSplitModal } from './components/BranchSplitModal';
+import { BranchMergeModal } from './components/BranchMergeModal';
 import { FreeMindNode, FreeMindMap } from './types/freemind';
 import { parseFreeMindXml } from './parser/freemindParser';
+import { serializeFreeMindXml } from './parser/freemindSerializer';
 import { resumeAudioContext } from './utils/audio';
 import { computeLayout } from './utils/layout';
 import { computeMapBounds, exportMindMapAsSvg, exportMindMapAsPng } from './utils/exportImage';
 import { persistTabsToStorage, prepareTabsForAppClose } from './utils/tabStorage';
-import { buildNodeLinkText } from './utils/nodeLinks';
-import { sanitizeDownloadFileName } from './utils/treeUtils';
+import { buildNodeLinkText, parseForestMindLink } from './utils/nodeLinks';
+import {
+  normalizePathForCompare,
+  resolveRelativeMmPath,
+  type PortalOpenTarget,
+  type ResolvedPortalPreview,
+} from './utils/portalNodes';
+import { getNodePlainText, sanitizeDownloadFileName } from './utils/treeUtils';
+import { buildSplitMapFromBranch, computeRelativeMmLink } from './utils/branchOperations';
 import {
   countActiveFilterConditions,
   EMPTY_MAP_FILTER,
@@ -98,6 +109,8 @@ export const App: React.FC = () => {
     handlePrevSearch,
     revealAndSelectNode,
     openMapAndSelectNode,
+    applySplitLinkToNode,
+    mergeMapIntoNode,
   } = useMindMap();
 
   const [zoomScale, setZoomScale] = useState(1.0);
@@ -107,6 +120,35 @@ export const App: React.FC = () => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
+  const [splitTargetNodeId, setSplitTargetNodeId] = useState<string | null>(null);
+  const [mergeTargetNodeId, setMergeTargetNodeId] = useState<string | null>(null);
+  const [expandedPortalsByTab, setExpandedPortalsByTab] = useState<Record<string, string[]>>({});
+  const [portalFileCache, setPortalFileCache] = useState<
+    Record<
+      string,
+      {
+        status: 'loading' | 'loaded' | 'error';
+        filePath?: string;
+        title?: string;
+        map?: FreeMindMap;
+        errorMessage?: string;
+      }
+    >
+  >({});
+  const [searcherInitialFolder, setSearcherInitialFolder] = useState<string | null>(null);
+  const {
+    workspace,
+    activeForestFolder,
+    isScanningForestFolder,
+    refreshWorkspace,
+    removeRecentFile,
+    clearRecentFiles,
+    pickAndAddForestFolder,
+    addForestFolder,
+    removeForestFolder,
+    scanForestFolder,
+    clearActiveForestFolder,
+  } = useWorkspace();
   const [extraSelectedNodeIds, setExtraSelectedNodeIds] = useState<string[]>([]);
   const [isQuickPaletteOpen, setIsQuickPaletteOpen] = useState(false);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
@@ -455,6 +497,9 @@ export const App: React.FC = () => {
     openMapAndSelectNode(mapToOpen, title, nodeId, resolvedFilePath);
     setExtraSelectedNodeIds([]);
     setIsForestViewOpen(false);
+    if (resolvedFilePath) {
+      void refreshWorkspace();
+    }
   };
 
   // Multi-selection & quick styling helpers (Issue #9)
@@ -759,13 +804,15 @@ export const App: React.FC = () => {
     api.getInitialFile().then(payload => {
       if (payload) {
         openFileInTab(payload.filePath, payload.content, payload.fileName);
+        void refreshWorkspace();
       }
     });
 
     return api.onOpenFile(payload => {
       openFileInTab(payload.filePath, payload.content, payload.fileName);
+      void refreshWorkspace();
     });
-  }, [openFileInTab, initialReloadTabIds, reconcileTabWithDisk]);
+  }, [openFileInTab, initialReloadTabIds, reconcileTabWithDisk, refreshWorkspace]);
 
   const saveTabById = useCallback(
     async (tabId: string): Promise<{ saved: boolean; filePath?: string }> => {
@@ -796,6 +843,7 @@ export const App: React.FC = () => {
         const res = await api.saveFile(targetTab.filePath, xml);
         if (res.ok) {
           markTabSaved(tabId, targetTab.filePath);
+          void refreshWorkspace();
           showToast(`上書き保存しました: ${targetTab.filePath.split(/[\\/]/).pop()}`);
           return { saved: true, filePath: targetTab.filePath };
         }
@@ -816,6 +864,7 @@ export const App: React.FC = () => {
       const res = await api.saveMmFileDialog(fallbackTitle, xml, suggestedPath);
       if (!res.canceled && res.filePath) {
         markTabSaved(tabId, res.filePath);
+        void refreshWorkspace();
         showToast(`保存しました: ${res.fileName || res.filePath}`);
         return { saved: true, filePath: res.filePath };
       }
@@ -824,7 +873,7 @@ export const App: React.FC = () => {
       }
       return { saved: false };
     },
-    [tabs, exportTabXml, markTabSaved, showToast]
+    [tabs, exportTabXml, markTabSaved, refreshWorkspace, showToast]
   );
 
   const handleSaveCurrentFile = useCallback(async () => {
@@ -946,8 +995,9 @@ export const App: React.FC = () => {
     if (payload) {
       openFileInTab(payload.filePath, payload.content, payload.fileName);
       setIsForestViewOpen(false);
+      void refreshWorkspace();
     }
-  }, [openFileInTab]);
+  }, [openFileInTab, refreshWorkspace]);
 
   const handleOpenFileLink = useCallback(
     async (targetPath: string, targetNodeId?: string) => {
@@ -957,13 +1007,65 @@ export const App: React.FC = () => {
       if (res.ok && res.filePath && res.content !== undefined) {
         openFileInTab(res.filePath, res.content, res.fileName, targetNodeId);
         setFocusedNodeId(null);
+        void refreshWorkspace();
         showToast(`マップを開きました: ${res.fileName || res.filePath}`);
       } else {
         showToast(`リンク先を開けませんでした: ${res.resolvedPath || targetPath}`);
       }
     },
-    [activeFilePath, openFileInTab, showToast]
+    [activeFilePath, openFileInTab, refreshWorkspace, showToast]
   );
+
+  const handleOpenRecentFile = useCallback(
+    async (filePath: string) => {
+      const api = window.electronAPI;
+      if (!api?.readFileByPath) {
+        const normalizedTarget = filePath.replace(/\\/g, '/').toLowerCase();
+        const openTab = tabsRef.current.find(
+          t => t.filePath?.replace(/\\/g, '/').toLowerCase() === normalizedTarget
+        );
+        if (openTab) {
+          setActiveTabId(openTab.id);
+          setIsForestViewOpen(false);
+        } else {
+          showToast('Web版ではローカルファイルの再読み込みに対応していないため「開く」から選択してください');
+        }
+        return;
+      }
+
+      const res = await api.readFileByPath(filePath);
+      if (res.ok && res.filePath && res.content !== undefined) {
+        openFileInTab(res.filePath, res.content, res.fileName);
+        setFocusedNodeId(null);
+        setIsForestViewOpen(false);
+        void refreshWorkspace();
+        showToast(`マップを開きました: ${res.fileName || res.filePath}`);
+      } else {
+        await removeRecentFile(filePath);
+        const fileName = filePath.split(/[\\/]/).pop() || filePath;
+        showToast(`ファイルが見つからなかったため履歴から除外しました: ${fileName}`);
+      }
+    },
+    [openFileInTab, refreshWorkspace, removeRecentFile, setActiveTabId, showToast]
+  );
+
+  const handleSelectForestFolder = useCallback(
+    async (folderPath: string) => {
+      const res = await scanForestFolder(folderPath);
+      if (!res.ok) {
+        showToast(res.error || '森フォルダの読み込みに失敗しました');
+      }
+    },
+    [scanForestFolder, showToast]
+  );
+
+  const handlePickAndAddForestFolder = useCallback(async () => {
+    const added = await pickAndAddForestFolder();
+    if (added) {
+      showToast(`🌲 森フォルダを登録しました: ${added.name}`);
+      await handleSelectForestFolder(added.folderPath);
+    }
+  }, [pickAndAddForestFolder, handleSelectForestFolder, showToast]);
 
   const handleDeleteNodeOrSelection = useCallback(
     (targetNodeId: string) => {
@@ -990,6 +1092,364 @@ export const App: React.FC = () => {
       }
     },
     [effectiveSelectedNodeIds, toggleFold]
+  );
+
+  const splitTargetNode = useMemo(() => {
+    if (!splitTargetNodeId) return null;
+    return findNodeInTree(map.root, splitTargetNodeId);
+  }, [map, splitTargetNodeId]);
+
+  const mergeTargetNode = useMemo(() => {
+    if (!mergeTargetNodeId) return null;
+    return findNodeInTree(map.root, mergeTargetNodeId);
+  }, [map, mergeTargetNodeId]);
+
+  const otherTabs = useMemo(
+    () => tabs.filter(t => t.id !== activeTabId),
+    [tabs, activeTabId]
+  );
+
+  const handleConfirmSplitBranch = useCallback(
+    async (options: { collapseToLinkNode: boolean; saveToDisk: boolean }) => {
+      if (!splitTargetNode) return;
+      if (splitTargetNode.id === map.root.id) {
+        showToast('ルートノード自体は株分けできません');
+        return;
+      }
+
+      const branchTitle = getNodePlainText(splitTargetNode) || '株分けマップ';
+      const splitMap = buildSplitMapFromBranch(splitTargetNode, map.version || '1.0.1');
+
+      if (options.saveToDisk && window.electronAPI) {
+        const xml = serializeFreeMindXml(splitMap);
+        const dirPrefix = activeFilePath?.match(/^(.*[\\/])/)?.[1] || '';
+        const suggestedPath = dirPrefix
+          ? `${dirPrefix}${sanitizeDownloadFileName(branchTitle, 'branch')}.mm`
+          : undefined;
+        const result = await window.electronAPI.saveMmFileDialog(branchTitle, xml, suggestedPath);
+        if (result.canceled || !result.filePath) {
+          return;
+        }
+        const linkValue = computeRelativeMmLink(activeFilePath, result.filePath);
+        applySplitLinkToNode(splitTargetNode.id, linkValue, options.collapseToLinkNode);
+        const savedTitle =
+          result.fileName?.replace(/\.(mm|xml)$/i, '') || branchTitle;
+        createNewTab(splitMap, savedTitle, result.filePath, false);
+        setFocusedNodeId(null);
+        setSplitTargetNodeId(null);
+        await refreshWorkspace();
+        showToast(`🌿 「${savedTitle}」へ株分けして保存しました`);
+        return;
+      }
+
+      const newTabId = `tab_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      applySplitLinkToNode(
+        splitTargetNode.id,
+        `forest://${newTabId}`,
+        options.collapseToLinkNode
+      );
+      createNewTab(splitMap, branchTitle, undefined, true, undefined, newTabId);
+      setFocusedNodeId(null);
+      setSplitTargetNodeId(null);
+      showToast(`🌿 「${branchTitle}」を新しいタブに株分けしました`);
+    },
+    [
+      splitTargetNode,
+      map.root.id,
+      map.version,
+      activeFilePath,
+      applySplitLinkToNode,
+      createNewTab,
+      refreshWorkspace,
+      showToast,
+    ]
+  );
+
+  const handleMergeFromTab = useCallback(
+    (sourceTabId: string, includeSourceRoot: boolean) => {
+      if (!mergeTargetNode) return;
+      const sourceTab = tabs.find(t => t.id === sourceTabId);
+      if (!sourceTab) {
+        showToast('合流元のタブが見つかりませんでした');
+        return;
+      }
+      const ok = mergeMapIntoNode(mergeTargetNode.id, sourceTab.map, includeSourceRoot);
+      if (ok) {
+        setMergeTargetNodeId(null);
+        showToast(`🪴 「${sourceTab.title}」を合流しました`);
+      } else {
+        showToast('合流するノードが見つかりませんでした');
+      }
+    },
+    [mergeTargetNode, tabs, mergeMapIntoNode, showToast]
+  );
+
+  const handleMergeFromFile = useCallback(
+    (sourceMap: FreeMindMap, sourceTitle: string, includeSourceRoot: boolean) => {
+      if (!mergeTargetNode) return;
+      const ok = mergeMapIntoNode(mergeTargetNode.id, sourceMap, includeSourceRoot);
+      if (ok) {
+        setMergeTargetNodeId(null);
+        showToast(`🪴 「${sourceTitle}」を合流しました`);
+      } else {
+        showToast('合流するノードが見つかりませんでした');
+      }
+    },
+    [mergeTargetNode, mergeMapIntoNode, showToast]
+  );
+
+  const expandedPortalNodeIds = useMemo(
+    () => expandedPortalsByTab[activeTabId] || [],
+    [expandedPortalsByTab, activeTabId]
+  );
+
+  const resolvedPortals = useMemo(() => {
+    const result = new Map<string, ResolvedPortalPreview>();
+    if (expandedPortalNodeIds.length === 0) return result;
+
+    const openTabByPath = new Map<string, (typeof tabs)[number]>();
+    for (const t of tabs) {
+      if (t.filePath) {
+        openTabByPath.set(normalizePathForCompare(t.filePath), t);
+      }
+    }
+
+    for (const nodeId of expandedPortalNodeIds) {
+      const hostNode = findNodeInTree(map.root, nodeId);
+      if (!hostNode?.link) continue;
+      const parsed = parseForestMindLink(hostNode.link);
+
+      if (parsed.kind === 'forest') {
+        const targetTab = tabs.find(t => t.id === parsed.tabId);
+        if (!targetTab) {
+          result.set(nodeId, {
+            sourceNodeId: nodeId,
+            targetKind: 'forest',
+            targetTabId: parsed.tabId,
+            targetNodeId: parsed.nodeId,
+            targetTitle: parsed.tabId,
+            status: 'error',
+            errorMessage: 'リンク先タブが見つかりませんでした',
+          });
+          continue;
+        }
+        if (targetTab.id === activeTabId && (!parsed.nodeId || parsed.nodeId === nodeId)) {
+          result.set(nodeId, {
+            sourceNodeId: nodeId,
+            targetKind: 'forest',
+            targetTabId: parsed.tabId,
+            targetNodeId: parsed.nodeId,
+            targetTitle: targetTab.title,
+            status: 'error',
+            errorMessage: '循環参照: 自身のノードは展開できません',
+          });
+          continue;
+        }
+        result.set(nodeId, {
+          sourceNodeId: nodeId,
+          targetKind: 'forest',
+          targetTabId: targetTab.id,
+          targetNodeId: parsed.nodeId,
+          targetTitle: targetTab.title,
+          status: 'loaded',
+          map: targetTab.map,
+        });
+        continue;
+      }
+
+      if (parsed.kind === 'file' && /\.mm$/i.test(parsed.filePath)) {
+        const resolvedPath = resolveRelativeMmPath(activeFilePath, parsed.filePath);
+        const pathKey = normalizePathForCompare(resolvedPath);
+        const fallbackTitle =
+          parsed.filePath.split(/[\\/]/).pop()?.replace(/\.mm$/i, '') || parsed.filePath;
+
+        const openTabMatch = openTabByPath.get(pathKey);
+        if (openTabMatch) {
+          if (openTabMatch.id === activeTabId && (!parsed.nodeId || parsed.nodeId === nodeId)) {
+            result.set(nodeId, {
+              sourceNodeId: nodeId,
+              targetKind: 'file',
+              targetFilePath: openTabMatch.filePath || resolvedPath,
+              targetNodeId: parsed.nodeId,
+              targetTitle: openTabMatch.title || fallbackTitle,
+              status: 'error',
+              errorMessage: '循環参照: 自身のノードは展開できません',
+            });
+            continue;
+          }
+          result.set(nodeId, {
+            sourceNodeId: nodeId,
+            targetKind: 'file',
+            targetFilePath: openTabMatch.filePath || resolvedPath,
+            targetNodeId: parsed.nodeId,
+            targetTitle: openTabMatch.title || fallbackTitle,
+            status: 'loaded',
+            map: openTabMatch.map,
+          });
+          continue;
+        }
+
+        const cached = portalFileCache[pathKey];
+        if (!cached) {
+          result.set(nodeId, {
+            sourceNodeId: nodeId,
+            targetKind: 'file',
+            targetFilePath: resolvedPath,
+            targetNodeId: parsed.nodeId,
+            targetTitle: fallbackTitle,
+            status: 'loading',
+          });
+          continue;
+        }
+
+        result.set(nodeId, {
+          sourceNodeId: nodeId,
+          targetKind: 'file',
+          targetFilePath: cached.filePath || resolvedPath,
+          targetNodeId: parsed.nodeId,
+          targetTitle: cached.title || fallbackTitle,
+          status: cached.status,
+          errorMessage: cached.errorMessage,
+          map: cached.map,
+        });
+      }
+    }
+
+    return result;
+  }, [expandedPortalNodeIds, map, tabs, activeTabId, activeFilePath, portalFileCache]);
+
+  const handleTogglePortal = useCallback(
+    async (nodeId: string) => {
+      const currentExpanded = expandedPortalsByTab[activeTabId] || [];
+      const isAlreadyExpanded = currentExpanded.includes(nodeId);
+      if (isAlreadyExpanded) {
+        setExpandedPortalsByTab(prev => ({
+          ...prev,
+          [activeTabId]: (prev[activeTabId] || []).filter(id => id !== nodeId),
+        }));
+        return;
+      }
+
+      const hostNode = findNodeInTree(map.root, nodeId);
+      if (!hostNode?.link) return;
+      const parsed = parseForestMindLink(hostNode.link);
+
+      setExpandedPortalsByTab(prev => ({
+        ...prev,
+        [activeTabId]: [...(prev[activeTabId] || []), nodeId],
+      }));
+
+      if (parsed.kind !== 'file' || !/\.mm$/i.test(parsed.filePath)) {
+        return;
+      }
+
+      const resolvedPath = resolveRelativeMmPath(activeFilePath, parsed.filePath);
+      const pathKey = normalizePathForCompare(resolvedPath);
+      const openTabMatch = tabsRef.current.find(
+        t => t.filePath && normalizePathForCompare(t.filePath) === pathKey
+      );
+      if (openTabMatch) {
+        return;
+      }
+
+      const api = window.electronAPI;
+      if (!api?.readFileByPath) {
+        setPortalFileCache(prev => ({
+          ...prev,
+          [pathKey]: {
+            status: 'error',
+            filePath: resolvedPath,
+            errorMessage: 'Web版では対象 .mm をタブで開くとポータル表示できます',
+          },
+        }));
+        return;
+      }
+
+      setPortalFileCache(prev => ({
+        ...prev,
+        [pathKey]: { status: 'loading', filePath: resolvedPath },
+      }));
+
+      try {
+        const res = await api.readFileByPath(parsed.filePath, activeFilePath);
+        if (!res.ok || res.content === undefined) {
+          setPortalFileCache(prev => ({
+            ...prev,
+            [pathKey]: {
+              status: 'error',
+              filePath: res.resolvedPath || resolvedPath,
+              errorMessage: `リンク先を読み込めませんでした: ${res.resolvedPath || parsed.filePath}`,
+            },
+          }));
+          return;
+        }
+        const parsedMap = parseFreeMindXml(res.content);
+        const title =
+          getNodePlainText(parsedMap.root) ||
+          res.fileName?.replace(/\.mm$/i, '') ||
+          parsed.filePath;
+        setPortalFileCache(prev => ({
+          ...prev,
+          [pathKey]: {
+            status: 'loaded',
+            filePath: res.filePath || resolvedPath,
+            title,
+            map: parsedMap,
+          },
+        }));
+      } catch (err) {
+        setPortalFileCache(prev => ({
+          ...prev,
+          [pathKey]: {
+            status: 'error',
+            filePath: resolvedPath,
+            errorMessage: `XML解析エラー: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        }));
+      }
+    },
+    [expandedPortalsByTab, activeTabId, map.root, activeFilePath]
+  );
+
+  const handleOpenPortalTarget = useCallback(
+    (target: PortalOpenTarget) => {
+      if (target.kind === 'forest' && target.tabId) {
+        if (tabs.some(t => t.id === target.tabId)) {
+          setFocusedNodeId(null);
+          if (target.nodeId) {
+            revealAndSelectNode(target.nodeId, target.tabId);
+          } else {
+            setActiveTabId(target.tabId);
+          }
+        } else {
+          showToast('リンク先のタブが見つかりませんでした');
+        }
+        return;
+      }
+
+      if (target.kind === 'file' && target.filePath) {
+        const pathKey = normalizePathForCompare(target.filePath);
+        const existingTab = tabs.find(
+          t => t.filePath && normalizePathForCompare(t.filePath) === pathKey
+        );
+        if (existingTab) {
+          setFocusedNodeId(null);
+          if (target.nodeId) {
+            revealAndSelectNode(target.nodeId, existingTab.id);
+          } else {
+            setActiveTabId(existingTab.id);
+          }
+          return;
+        }
+
+        if (window.electronAPI) {
+          void handleOpenFileLink(target.filePath, target.nodeId);
+        } else {
+          showToast('リンク先のタブが見つかりませんでした');
+        }
+      }
+    },
+    [tabs, revealAndSelectNode, setActiveTabId, handleOpenFileLink, showToast]
   );
 
   return (
@@ -1076,6 +1536,10 @@ export const App: React.FC = () => {
             return next;
           });
         }}
+        recentFiles={workspace.recentFiles}
+        onOpenRecentFile={handleOpenRecentFile}
+        onRemoveRecentFile={removeRecentFile}
+        onClearRecentFiles={clearRecentFiles}
       />
 
       {/* Multi-Map Tab Bar (forestMind Forest View feature) */}
@@ -1116,6 +1580,28 @@ export const App: React.FC = () => {
               setIsForestViewOpen(false);
             }}
             onCloseOverview={() => setIsForestViewOpen(false)}
+            recentFiles={workspace.recentFiles}
+            forestFolders={workspace.forestFolders}
+            activeForestFolder={activeForestFolder}
+            isScanningForestFolder={isScanningForestFolder}
+            onOpenRecentFile={handleOpenRecentFile}
+            onRemoveRecentFile={removeRecentFile}
+            onClearRecentFiles={clearRecentFiles}
+            onPickAndAddForestFolder={
+              window.electronAPI?.pickForestFolder ? handlePickAndAddForestFolder : undefined
+            }
+            onSelectForestFolder={handleSelectForestFolder}
+            onRemoveForestFolder={removeForestFolder}
+            onSearchInForestFolder={
+              window.electronAPI?.scanMmFolderByPath
+                ? folderPath => {
+                    setSearcherInitialFolder(folderPath);
+                    setIsSearcherOpen(true);
+                  }
+                : undefined
+            }
+            onClearActiveForestFolder={clearActiveForestFolder}
+            onOpenScannedMap={handleOpenSearcherNode}
           />
         ) : (
           <>
@@ -1206,6 +1692,7 @@ export const App: React.FC = () => {
                     breadcrumbs={focusState.breadcrumbs}
                     onSelectBreadcrumb={nodeId => setFocusedNodeId(nodeId)}
                     onExitFocus={() => setFocusedNodeId(null)}
+                    onSplitFocusedBranch={() => setSplitTargetNodeId(focusState.activeRoot.id)}
                   />
                 ) : null
               }
@@ -1227,6 +1714,12 @@ export const App: React.FC = () => {
               onExitFocus={() => setFocusedNodeId(null)}
               onCopyNodeLink={handleCopyNodeLink}
               onOpenPropertiesPanel={() => setIsPropertiesOpen(true)}
+              onSplitBranch={nodeId => setSplitTargetNodeId(nodeId)}
+              onMergeMap={nodeId => setMergeTargetNodeId(nodeId)}
+              expandedPortalNodeIds={expandedPortalNodeIds}
+              resolvedPortals={resolvedPortals}
+              onTogglePortal={handleTogglePortal}
+              onOpenPortalTarget={handleOpenPortalTarget}
               filterOverlay={
                 <MapFilterBar
                   isOpen={isFilterBarOpen}
@@ -1343,8 +1836,41 @@ export const App: React.FC = () => {
       {/* Local Folder Search Modal */}
       <FreeMindSearcherModal
         isOpen={isSearcherOpen}
-        onClose={() => setIsSearcherOpen(false)}
+        onClose={() => {
+          setIsSearcherOpen(false);
+          setSearcherInitialFolder(null);
+        }}
         onOpenMapNode={handleOpenSearcherNode}
+        forestFolders={workspace.forestFolders}
+        lastScannedFolder={workspace.lastScannedFolder}
+        initialFolderToScan={searcherInitialFolder}
+        onConsumedInitialFolder={() => setSearcherInitialFolder(null)}
+        onFolderScanned={refreshWorkspace}
+        onRegisterForestFolder={async (folderPath, name) => {
+          await addForestFolder(folderPath, name);
+          showToast(`🌲 森フォルダを登録しました: ${name}`);
+        }}
+      />
+
+      {/* Branch Split Modal (#7) */}
+      <BranchSplitModal
+        isOpen={Boolean(splitTargetNode)}
+        branchNode={splitTargetNode}
+        isElectron={Boolean(window.electronAPI)}
+        hasSourceFilePath={Boolean(activeFilePath)}
+        onConfirmSplit={handleConfirmSplitBranch}
+        onClose={() => setSplitTargetNodeId(null)}
+      />
+
+      {/* Branch Merge Modal (#7) */}
+      <BranchMergeModal
+        isOpen={Boolean(mergeTargetNode)}
+        targetNode={mergeTargetNode}
+        otherTabs={otherTabs}
+        isElectron={Boolean(window.electronAPI)}
+        onMergeFromTab={handleMergeFromTab}
+        onMergeFromFile={handleMergeFromFile}
+        onClose={() => setMergeTargetNodeId(null)}
       />
     </div>
   );

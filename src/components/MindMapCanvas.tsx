@@ -9,9 +9,31 @@ import {
   resolveNodeDisplayColors,
 } from '../utils/quickStyle';
 import { parseForestMindLink } from '../utils/nodeLinks';
+import {
+  injectPortalSubtrees,
+  isPortalCapableLink,
+  type PortalOpenTarget,
+  type ResolvedPortalPreview,
+} from '../utils/portalNodes';
 import type { MapFilterResult } from '../utils/mapFilter';
 import { NodeContextMenu } from './NodeContextMenu';
-import { ExternalLink, FileText, ChevronRight, ChevronLeft, Maximize2, Map as MapIcon, Minus, X, Pencil, Trash2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  FileText,
+  Layers,
+  Map as MapIcon,
+  Maximize2,
+  Minus,
+  Pencil,
+  RotateCcw,
+  Trash2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 
 interface MindMapCanvasProps {
   map: FreeMindMap;
@@ -76,6 +98,12 @@ interface MindMapCanvasProps {
   onExitFocus?: () => void;
   onCopyNodeLink?: (nodeId: string) => void;
   onOpenPropertiesPanel?: () => void;
+  onSplitBranch?: (nodeId: string) => void;
+  onMergeMap?: (nodeId: string) => void;
+  expandedPortalNodeIds?: string[];
+  resolvedPortals?: Map<string, ResolvedPortalPreview>;
+  onTogglePortal?: (nodeId: string) => void;
+  onOpenPortalTarget?: (target: PortalOpenTarget) => void;
 }
 
 export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
@@ -121,6 +149,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onExitFocus,
   onCopyNodeLink,
   onOpenPropertiesPanel,
+  onSplitBranch,
+  onMergeMap,
+  expandedPortalNodeIds,
+  resolvedPortals,
+  onTogglePortal,
+  onOpenPortalTarget,
   onUndo,
   onRedo,
   zoomScale,
@@ -164,10 +198,88 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     return baseRoot.folded ? { ...baseRoot, folded: false } : baseRoot;
   }, [focusedRoot, map.root]);
 
+  const expandedPortalSet = useMemo(
+    () => new Set(expandedPortalNodeIds || []),
+    [expandedPortalNodeIds]
+  );
+
+  const effectivePortals = useMemo(() => {
+    if (isPresentationActive || !resolvedPortals || resolvedPortals.size === 0) {
+      return undefined;
+    }
+    return resolvedPortals;
+  }, [isPresentationActive, resolvedPortals]);
+
+  const { augmentedRoot, ghostMetaMap } = useMemo(
+    () => injectPortalSubtrees(effectiveRoot, effectivePortals),
+    [effectiveRoot, effectivePortals]
+  );
+
   // Compute layout tree, curved edge paths, arrow links, and clouds
   const { layoutNodes, edges, arrowLinks, clouds } = useMemo(() => {
-    return computeLayout(effectiveRoot);
-  }, [effectiveRoot]);
+    return computeLayout(augmentedRoot);
+  }, [augmentedRoot]);
+
+  const portalContainers = useMemo(() => {
+    if (ghostMetaMap.size === 0) return [];
+    const grouped = new Map<
+      string,
+      {
+        sourceNodeId: string;
+        minX: number;
+        maxX: number;
+        minY: number;
+        maxY: number;
+        targetTitle: string;
+        targetKind: 'file' | 'forest';
+        targetFilePath?: string;
+        targetTabId?: string;
+        targetNodeId?: string;
+        status: 'loaded' | 'loading' | 'error';
+      }
+    >();
+
+    for (const lNode of layoutNodes.values()) {
+      const meta = ghostMetaMap.get(lNode.id);
+      if (!meta) continue;
+      const left = lNode.x - lNode.width / 2;
+      const right = lNode.x + lNode.width / 2;
+      const top = lNode.y - lNode.height / 2;
+      const bottom = lNode.y + lNode.height / 2;
+      const existing = grouped.get(meta.portalSourceNodeId);
+      if (!existing) {
+        grouped.set(meta.portalSourceNodeId, {
+          sourceNodeId: meta.portalSourceNodeId,
+          minX: left,
+          maxX: right,
+          minY: top,
+          maxY: bottom,
+          targetTitle: meta.targetTitle,
+          targetKind: meta.targetKind,
+          targetFilePath: meta.targetFilePath,
+          targetTabId: meta.targetTabId,
+          targetNodeId: meta.isPortalEntry ? meta.originalNodeId : undefined,
+          status: meta.status,
+        });
+      } else {
+        existing.minX = Math.min(existing.minX, left);
+        existing.maxX = Math.max(existing.maxX, right);
+        existing.minY = Math.min(existing.minY, top);
+        existing.maxY = Math.max(existing.maxY, bottom);
+        if (meta.isPortalEntry) {
+          existing.targetNodeId = meta.originalNodeId;
+        }
+      }
+    }
+
+    return Array.from(grouped.values()).map(box => ({
+      ...box,
+      x: box.minX - 16,
+      y: box.minY - 36,
+      width: Math.max(210, box.maxX - box.minX + 32),
+      height: box.maxY - box.minY + 52,
+    }));
+  }, [ghostMetaMap, layoutNodes]);
 
   useEffect(() => {
     if (isPresentationActive) {
@@ -714,6 +826,19 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             </marker>
           </defs>
 
+          {/* Portal Preview Containers (#8) */}
+          {portalContainers.map(box => (
+            <rect
+              key={`portal-box-${box.sourceNodeId}`}
+              x={box.x}
+              y={box.y}
+              width={box.width}
+              height={box.height}
+              rx={14}
+              className={`portal-container-rect status-${box.status}`}
+            />
+          ))}
+
           {/* Clouds */}
           {clouds
             .filter(c => !isPresentationActive || visibleNodeIds?.has(c.id))
@@ -749,6 +874,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 (visibleNodeIds?.has(edge.sourceId) && visibleNodeIds?.has(edge.targetId))
             )
             .map((edge: EdgePath) => {
+              const isGhostEdge = ghostMetaMap.has(edge.targetId);
               const isSpotlightEdge =
                 isPresentationActive &&
                 isSpotlightEnabled &&
@@ -768,10 +894,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   key={edge.id}
                   d={edge.d}
                   fill="none"
-                  stroke={isSpotlightEdge ? '#8b5cf6' : edge.color}
+                  stroke={isSpotlightEdge ? '#8b5cf6' : isGhostEdge ? '#0d9488' : edge.color}
                   strokeWidth={isSpotlightEdge ? Math.max(edge.width + 1.8, 3.5) : edge.width}
+                  strokeDasharray={isGhostEdge ? '5 4' : undefined}
+                  strokeOpacity={isGhostEdge ? 0.78 : undefined}
                   strokeLinecap="round"
-                  className={`mindmap-edge ${isSpotlightEdge ? 'presentation-spotlight-edge' : ''
+                  className={`mindmap-edge ${isGhostEdge ? 'portal-ghost-edge' : ''} ${isSpotlightEdge ? 'presentation-spotlight-edge' : ''
                     } ${isDimmedEdge ? 'presentation-dimmed-edge' : ''} ${
                       isFilterDimmedEdge ? 'filter-dimmed-edge' : ''
                     }`}
@@ -821,13 +949,64 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
         {/* Nodes Layer */}
         <div className="mindmap-nodes-layer">
+          {/* Portal Container Headers (#8) */}
+          {!isPresentationActive &&
+            portalContainers.map(box => (
+              <div
+                key={`portal-header-${box.sourceNodeId}`}
+                className={`portal-container-header status-${box.status}`}
+                style={{ left: `${box.x + 10}px`, top: `${box.y + 6}px` }}
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
+              >
+                <span
+                  className="portal-header-badge"
+                  title={box.targetFilePath || box.targetTitle}
+                >
+                  <Layers size={11} />
+                  <span className="portal-header-title">{box.targetTitle}</span>
+                  <span className="portal-readonly-tag">参照専用</span>
+                </span>
+                {onOpenPortalTarget && (box.targetFilePath || box.targetTabId) && (
+                  <button
+                    type="button"
+                    className="portal-open-tab-btn"
+                    title="このマップを別タブで開く"
+                    onClick={() =>
+                      onOpenPortalTarget({
+                        kind: box.targetKind,
+                        filePath: box.targetFilePath,
+                        tabId: box.targetTabId,
+                        nodeId: box.targetNodeId,
+                      })
+                    }
+                  >
+                    <span>別タブで開く</span>
+                    <ArrowUpRight size={11} />
+                  </button>
+                )}
+                {onTogglePortal && (
+                  <button
+                    type="button"
+                    className="portal-close-btn"
+                    title="ポータル展開を閉じる"
+                    onClick={() => onTogglePortal(box.sourceNodeId)}
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+
           {Array.from(layoutNodes.values())
             .filter(lNode => !isPresentationActive || visibleNodeIds?.has(lNode.id))
             .map((lNode: LayoutNode) => {
-              const isSelected = selectedNodeId === lNode.id;
-              const isMultiSelected = !isSelected && selectedNodeIds.includes(lNode.id);
-              const isSearchMatch = searchMatchedIds.includes(lNode.id);
-              const isEditing = editingNodeId === lNode.id;
+              const ghostMeta = ghostMetaMap.get(lNode.id);
+              const isPortalExpanded = !ghostMeta && expandedPortalSet.has(lNode.id);
+              const isSelected = !ghostMeta && selectedNodeId === lNode.id;
+              const isMultiSelected = !ghostMeta && !isSelected && selectedNodeIds.includes(lNode.id);
+              const isSearchMatch = !ghostMeta && searchMatchedIds.includes(lNode.id);
+              const isEditing = !ghostMeta && editingNodeId === lNode.id;
               const isPresentationActiveNode =
                 isPresentationActive && activeNodeId === lNode.id;
               const isSpotlightPathNode =
@@ -877,12 +1056,17 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               return (
                 <div
                   key={lNode.id}
-                  draggable={!isDisplayRoot && !isEditing}
+                  draggable={!ghostMeta && !isDisplayRoot && !isEditing}
                   onDragStart={e => {
+                    if (ghostMeta) {
+                      e.preventDefault();
+                      return;
+                    }
                     e.dataTransfer.setData('text/plain', lNode.id);
                     e.dataTransfer.effectAllowed = 'move';
                   }}
                   onDragOver={e => {
+                    if (ghostMeta) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
                     if (dragOverNodeId !== lNode.id) {
@@ -890,11 +1074,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     }
                   }}
                   onDragLeave={e => {
+                    if (ghostMeta) return;
                     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                       setDragOverNodeId(null);
                     }
                   }}
                   onDrop={e => {
+                    if (ghostMeta) return;
                     e.preventDefault();
                     setDragOverNodeId(null);
                     const draggedId = e.dataTransfer.getData('text/plain');
@@ -910,7 +1096,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                       isFilterMatch ? 'filter-match' : ''
                     } ${isFilterPath ? 'filter-path' : ''} ${
                       isFilterDimmed ? 'filter-dimmed' : ''
+                    } ${ghostMeta ? `portal-ghost-node status-${ghostMeta.status}` : ''} ${
+                      isPortalExpanded ? 'portal-host-expanded' : ''
                     }`}
+                  title={
+                    ghostMeta && ghostMeta.status === 'loaded'
+                      ? `クリックで元マップ「${ghostMeta.targetTitle}」を開く (参照専用)`
+                      : undefined
+                  }
                   style={{
                     left: `${anchorLeft}px`,
                     top: `${lNode.y}px`,
@@ -927,6 +1120,17 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   onClick={e => {
                     e.stopPropagation();
                     setContextMenu(null);
+                    if (ghostMeta) {
+                      if (ghostMeta.status === 'loaded' && onOpenPortalTarget) {
+                        onOpenPortalTarget({
+                          kind: ghostMeta.targetKind,
+                          filePath: ghostMeta.targetFilePath,
+                          tabId: ghostMeta.targetTabId,
+                          nodeId: ghostMeta.originalNodeId,
+                        });
+                      }
+                      return;
+                    }
                     if ((e.ctrlKey || e.metaKey) && onToggleNodeSelection) {
                       onToggleNodeSelection(lNode.id);
                     } else {
@@ -936,11 +1140,26 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   onDoubleClick={e => {
                     e.stopPropagation();
                     setContextMenu(null);
+                    if (ghostMeta) {
+                      if (ghostMeta.status === 'loaded' && onOpenPortalTarget) {
+                        onOpenPortalTarget({
+                          kind: ghostMeta.targetKind,
+                          filePath: ghostMeta.targetFilePath,
+                          tabId: ghostMeta.targetTabId,
+                          nodeId: ghostMeta.originalNodeId,
+                        });
+                      }
+                      return;
+                    }
                     setSelectedNodeId(lNode.id);
                     setEditingNodeId(lNode.id);
                   }}
                   onContextMenu={e => {
-                    if (isPresentationActive) return;
+                    if (ghostMeta || isPresentationActive) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
                     e.preventDefault();
                     e.stopPropagation();
                     if (!selectedNodeIds.includes(lNode.id) && selectedNodeId !== lNode.id) {
@@ -1018,29 +1237,54 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     </span>
                   )}
 
-                  {/* Link Icon */}
-                  {node.link && (() => {
+                  {/* Link Icon & Portal Preview Toggle (#8) */}
+                  {!ghostMeta && node.link && (() => {
                     const parsedLink = parseForestMindLink(node.link);
                     const isExternalLink = parsedLink.kind === 'external';
+                    const portalCapable = isPortalCapableLink(node.link);
                     return (
-                      <a
-                        href={isExternalLink ? node.link : '#'}
-                        target={isExternalLink ? '_blank' : undefined}
-                        rel="noopener noreferrer"
-                        className="node-link-btn"
-                        title={`リンクを開く: ${node.link}`}
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleLinkClick(e, node.link!);
-                        }}
-                      >
-                        <ExternalLink size={12} />
-                      </a>
+                      <>
+                        <a
+                          href={isExternalLink ? node.link : '#'}
+                          target={isExternalLink ? '_blank' : undefined}
+                          rel="noopener noreferrer"
+                          className="node-link-btn"
+                          title={`リンクを開く: ${node.link}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleLinkClick(e, node.link!);
+                          }}
+                        >
+                          <ExternalLink size={12} />
+                        </a>
+                        {portalCapable && onTogglePortal && (
+                          <button
+                            type="button"
+                            className={`node-portal-btn ${isPortalExpanded ? 'active' : ''}`}
+                            title={
+                              isPortalExpanded
+                                ? 'ポータル展開を閉じる'
+                                : 'リンク先ツリーをポータル展開 (参照専用)'
+                            }
+                            aria-label={
+                              isPortalExpanded
+                                ? 'ポータル展開を閉じる'
+                                : 'リンク先ツリーをポータル展開'
+                            }
+                            onClick={e => {
+                              e.stopPropagation();
+                              onTogglePortal(lNode.id);
+                            }}
+                          >
+                            <Layers size={12} />
+                          </button>
+                        )}
+                      </>
                     );
                   })()}
 
                   {/* Note Indicator */}
-                  {node.noteHtml && (
+                  {!ghostMeta && node.noteHtml && (
                     <button
                       type="button"
                       className={`node-note-indicator ${
@@ -1104,7 +1348,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                   )}
 
                   {/* Fold / Unfold Handle (Hidden on root when unfolded so it never overlaps the title) */}
-                  {hasChildren && (!isDisplayRoot || node.folded) && (
+                  {!ghostMeta && hasChildren && (!isDisplayRoot || node.folded) && (
                     <button
                       className={`fold-handle ${node.folded ? 'folded' : 'unfolded'}`}
                       title={node.folded ? '展開する (Space)' : '折りたたむ (Space)'}
@@ -1413,7 +1657,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       {/* Node Context Menu */}
       {!isPresentationActive && contextMenu && (() => {
         const ctxLayout = layoutNodes.get(contextMenu.nodeId);
-        if (!ctxLayout) return null;
+        if (!ctxLayout || ghostMetaMap.has(ctxLayout.id)) return null;
         const ctxNode = ctxLayout.node;
         const hasNonRootInSelection =
           selectedNodeIds.some(id => id !== map.root.id) || ctxLayout.id !== map.root.id;
@@ -1447,6 +1691,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               }
             }}
             onOpenProperties={() => onOpenPropertiesPanel?.()}
+            onSplitBranch={onSplitBranch ? () => onSplitBranch(ctxLayout.id) : undefined}
+            onMergeMap={onMergeMap ? () => onMergeMap(ctxLayout.id) : undefined}
+            onTogglePortal={
+              onTogglePortal && ctxNode.link && isPortalCapableLink(ctxNode.link)
+                ? () => onTogglePortal(ctxLayout.id)
+                : undefined
+            }
+            isPortalExpanded={expandedPortalSet.has(ctxLayout.id)}
             onDelete={() => onDeleteNode(ctxLayout.id)}
             onClose={() => setContextMenu(null)}
           />

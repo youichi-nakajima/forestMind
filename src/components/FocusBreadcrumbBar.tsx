@@ -1,17 +1,19 @@
 import React from 'react';
-import { ChevronRight, Focus, X } from 'lucide-react';
+import { ChevronRight, Focus, GitFork, X } from 'lucide-react';
 import type { FocusBreadcrumb } from '../utils/focusMode';
 
 interface FocusBreadcrumbBarProps {
   breadcrumbs: FocusBreadcrumb[];
   onSelectBreadcrumb: (nodeId: string) => void;
   onExitFocus: () => void;
+  onSplitFocusedBranch?: () => void;
 }
 
 export const FocusBreadcrumbBar: React.FC<FocusBreadcrumbBarProps> = ({
   breadcrumbs,
   onSelectBreadcrumb,
   onExitFocus,
+  onSplitFocusedBranch,
 }) => {
   if (breadcrumbs.length === 0) return null;
 
@@ -58,6 +60,18 @@ export const FocusBreadcrumbBar: React.FC<FocusBreadcrumbBarProps> = ({
           );
         })}
       </div>
+
+      {onSplitFocusedBranch && (
+        <button
+          type="button"
+          className="focus-split-btn"
+          title="フォーカス中のブランチを別マップへ株分け"
+          onClick={onSplitFocusedBranch}
+        >
+          <GitFork size={13} />
+          <span>この枝を株分け</span>
+        </button>
+      )}
 
       <button
         type="button"

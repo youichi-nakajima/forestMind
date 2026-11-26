@@ -4667,3 +4667,1449 @@ body {
   border-color: #f87171;
   color: #fecaca;
 }
+
+
+/* ==========================================================================
+   Workspace: Recent Files & Forest Folders (Issue #12)
+   ========================================================================== */
+.open-dropdown-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.open-recent-toggle-btn {
+  padding: 6px 5px !important;
+  color: var(--text-muted);
+}
+
+.open-recent-toggle-btn.active {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--text-main);
+}
+
+.recent-files-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  width: 310px;
+  max-width: 90vw;
+  z-index: 120;
+  overflow: hidden;
+}
+
+.recent-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: #f8fafc;
+}
+
+.recent-files-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.recent-files-clear-btn {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.recent-files-clear-btn:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.recent-files-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-file-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.recent-file-row:last-child {
+  border-bottom: none;
+}
+
+.recent-file-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+
+.recent-file-item:hover {
+  background-color: #f1f5f9;
+}
+
+.recent-file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-file-dir {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-file-remove-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.recent-file-remove-btn:hover {
+  color: #dc2626;
+}
+
+/* Forest Overview Workspace Panels */
+.forest-workspace-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.forest-workspace-panel {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.forest-workspace-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.forest-workspace-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.forest-workspace-add-btn {
+  font-size: 12px !important;
+  padding: 4px 10px !important;
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+.forest-workspace-add-btn:hover {
+  background-color: #d1fae5 !important;
+}
+
+.forest-workspace-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.forest-folders-list,
+.forest-recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.forest-folder-chip,
+.forest-recent-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  border-radius: 9999px;
+  overflow: hidden;
+  max-width: 100%;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.forest-folder-chip:hover,
+.forest-recent-chip:hover {
+  border-color: #059669;
+  background-color: #f0fdf4;
+}
+
+.forest-folder-chip.active {
+  border-color: #059669;
+  background-color: #dcfce7;
+  box-shadow: 0 0 0 1px rgba(5, 150, 105, 0.2);
+}
+
+.forest-folder-chip-main,
+.forest-recent-chip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 0;
+}
+
+.forest-folder-chip-name,
+.forest-recent-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.forest-folder-chip-action,
+.forest-folder-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 7px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(203, 213, 225, 0.7);
+  color: #64748b;
+  cursor: pointer;
+}
+
+.forest-folder-chip-action:hover {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.forest-folder-chip-remove:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+/* Active Forest Folder Maps */
+.forest-folder-maps-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(236, 253, 245, 0.45);
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.forest-folder-maps-heading h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #064e3b;
+}
+
+.forest-folder-count-pill {
+  font-size: 11px;
+  font-weight: 600;
+  background: #d1fae5;
+  color: #047857;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.forest-folder-maps-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.folder-map-relpath {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Searcher Modal Quick Workspace Strip */
+.searcher-register-folder-btn {
+  background-color: #fef3c7 !important;
+  border-color: #fcd34d !important;
+  color: #92400e !important;
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+}
+
+.searcher-register-folder-btn:hover:not(:disabled) {
+  background-color: #fde68a !important;
+}
+
+.searcher-workspace-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.searcher-workspace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #a7f3d0;
+  background-color: #ecfdf5;
+  color: #065f46;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.searcher-workspace-chip:hover:not(:disabled) {
+  background-color: #d1fae5;
+  border-color: #34d399;
+}
+
+.searcher-workspace-chip.secondary {
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+  color: #334155;
+}
+
+.searcher-workspace-chip.secondary:hover:not(:disabled) {
+  background-color: #e2e8f0;
+}
+
+.searcher-workspace-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dark Theme Workspace Overrides */
+.app-container.theme-dark .open-recent-toggle-btn.active {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .recent-files-menu {
+  background-color: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.app-container.theme-dark .recent-files-header {
+  background-color: #1e293b;
+  border-bottom-color: #334155;
+}
+
+.app-container.theme-dark .recent-file-row {
+  border-bottom-color: rgba(51, 65, 85, 0.6);
+}
+
+.app-container.theme-dark .recent-file-item:hover {
+  background-color: #1e293b;
+}
+
+.app-container.theme-dark .recent-file-name {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .forest-workspace-panel {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .forest-workspace-panel-title {
+  color: #f1f5f9;
+}
+
+.app-container.theme-dark .forest-workspace-add-btn {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: #6ee7b7 !important;
+}
+
+.app-container.theme-dark .forest-folder-chip,
+.app-container.theme-dark .forest-recent-chip {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.app-container.theme-dark .forest-folder-chip:hover,
+.app-container.theme-dark .forest-recent-chip:hover {
+  background-color: #1f2937;
+  border-color: #10b981;
+}
+
+.app-container.theme-dark .forest-folder-chip.active {
+  background-color: rgba(16, 185, 129, 0.22);
+  border-color: #10b981;
+}
+
+.app-container.theme-dark .forest-folder-chip-main,
+.app-container.theme-dark .forest-recent-chip-main {
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .forest-folder-chip-action,
+.app-container.theme-dark .forest-folder-chip-remove {
+  border-left-color: #334155;
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .forest-folder-maps-section {
+  background: rgba(6, 78, 59, 0.16);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.app-container.theme-dark .forest-folder-maps-heading h3 {
+  color: #a7f3d0;
+}
+
+.app-container.theme-dark .forest-folder-count-pill {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .searcher-register-folder-btn {
+  background-color: rgba(245, 158, 11, 0.18) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: #fde68a !important;
+}
+
+.app-container.theme-dark .searcher-workspace-chip {
+  background-color: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .searcher-workspace-chip.secondary {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+
+/* ==========================================================================
+   Branch Split & Merge Modals (Issue #7)
+   ========================================================================== */
+.branch-modal-dialog {
+  max-width: 540px;
+}
+
+.branch-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.branch-summary-card {
+  background-color: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.branch-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.branch-summary-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.branch-summary-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.branch-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  background-color: #ffffff;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.branch-option-item:hover {
+  border-color: #94a3b8;
+}
+
+.branch-option-item.selected {
+  border-color: #059669;
+  background-color: #f0fdf4;
+}
+
+.branch-option-item input[type='radio'] {
+  margin-top: 3px;
+  accent-color: #059669;
+}
+
+.branch-option-item strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.branch-option-item p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.branch-modal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.branch-modal-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.branch-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+  background-color: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.merge-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.merge-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.merge-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.merge-tabs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.merge-tab-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  background-color: #ffffff;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.merge-tab-option.selected {
+  border-color: #059669;
+  background-color: #f0fdf4;
+}
+
+.merge-tab-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.merge-tab-info strong {
+  font-size: 13px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-tab-info span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.merge-file-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.merge-error-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.branch-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.merge-undo-note {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.focus-split-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  background-color: #ecfdf5;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.focus-split-btn:hover {
+  background-color: #d1fae5;
+  border-color: #34d399;
+}
+
+/* Dark theme overrides for Issue #7 */
+.app-container.theme-dark .branch-summary-card,
+.app-container.theme-dark .branch-modal-footer {
+  background-color: #111827;
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .branch-summary-title {
+  color: #f8fafc;
+}
+
+.app-container.theme-dark .branch-option-item,
+.app-container.theme-dark .merge-tab-option {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.app-container.theme-dark .branch-option-item.selected,
+.app-container.theme-dark .merge-tab-option.selected {
+  background-color: rgba(16, 185, 129, 0.16);
+  border-color: #10b981;
+}
+
+.app-container.theme-dark .branch-modal-note {
+  background-color: rgba(37, 99, 235, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+.app-container.theme-dark .merge-error-box {
+  background-color: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
+.app-container.theme-dark .focus-split-btn {
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .focus-split-btn:hover {
+  background-color: rgba(16, 185, 129, 0.3);
+}
+
+
+/* ==========================================================================
+   Tree-to-Tree Portal Preview / Ghost Nodes (Issue #8)
+   ========================================================================== */
+.node-portal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  border: 1px solid rgba(13, 148, 136, 0.35);
+  border-radius: 5px;
+  background-color: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+  cursor: pointer;
+  margin-left: 3px;
+  transition: background-color 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.node-portal-btn:hover {
+  background-color: rgba(20, 184, 166, 0.22);
+  border-color: #0d9488;
+}
+
+.node-portal-btn.active {
+  background-color: #0d9488;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.portal-host-expanded {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.35);
+}
+
+.portal-container-rect {
+  fill: rgba(240, 253, 250, 0.65);
+  stroke: #0d9488;
+  stroke-width: 1.75;
+  stroke-dasharray: 6 4;
+}
+
+.portal-container-rect.status-error {
+  fill: rgba(254, 242, 242, 0.7);
+  stroke: #ef4444;
+}
+
+.portal-container-rect.status-loading {
+  fill: rgba(248, 250, 252, 0.72);
+  stroke: #64748b;
+}
+
+.portal-container-header {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.94);
+  border: 1px solid #5eead4;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.14);
+  font-size: 11px;
+  color: #0f766e;
+  z-index: 6;
+  white-space: nowrap;
+}
+
+.portal-container-header.status-error {
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.portal-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.portal-header-title {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.portal-readonly-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  background-color: #ccfbf1;
+  color: #115e59;
+}
+
+.portal-open-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  border-radius: 9999px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background-color: #0d9488;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.portal-open-tab-btn:hover {
+  background-color: #0f766e;
+}
+
+.portal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  padding: 2px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.portal-close-btn:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.mindmap-node.portal-ghost-node {
+  opacity: 0.88;
+  border-style: dashed !important;
+  cursor: pointer;
+  background-color: rgba(240, 253, 250, 0.92) !important;
+  border-color: #14b8a6 !important;
+}
+
+.mindmap-node.portal-ghost-node:hover {
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.35);
+}
+
+.mindmap-node.portal-ghost-node.status-error {
+  background-color: rgba(254, 242, 242, 0.95) !important;
+  border-color: #f87171 !important;
+  color: #991b1b !important;
+}
+
+.app-container.theme-dark .node-portal-btn {
+  background-color: rgba(45, 212, 191, 0.14);
+  border-color: rgba(45, 212, 191, 0.45);
+  color: #5eead4;
+}
+
+.app-container.theme-dark .node-portal-btn.active {
+  background-color: #0d9488;
+  color: #f8fafc;
+}
+
+.app-container.theme-dark .portal-container-rect {
+  fill: rgba(13, 148, 136, 0.1);
+  stroke: #2dd4bf;
+}
+
+.app-container.theme-dark .portal-container-rect.status-error {
+  fill: rgba(239, 68, 68, 0.1);
+  stroke: #f87171;
+}
+
+.app-container.theme-dark .portal-container-header {
+  background-color: rgba(15, 23, 42, 0.92);
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #5eead4;
+}
+
+.app-container.theme-dark .portal-readonly-tag {
+  background-color: rgba(45, 212, 191, 0.2);
+  color: #99f6e4;
+}
+
+.app-container.theme-dark .mindmap-node.portal-ghost-node {
+  background-color: rgba(15, 42, 46, 0.92) !important;
+  border-color: #2dd4bf !important;
+  color: #e2e8f0 !important;
+}
+
+
+/* ==========================================================================
+   Forest Knowledge Graph View (Issue #6)
+   ========================================================================== */
+.forest-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.forest-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 10px;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  gap: 3px;
+}
+
+.forest-view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.forest-view-toggle-btn.active {
+  background-color: #ffffff;
+  color: #047857;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
+}
+
+.forest-graph-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 540px;
+}
+
+.forest-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.forest-graph-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.forest-season-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.forest-season-toggle-btn.active {
+  background-color: #ecfdf5;
+  border-color: #10b981;
+  color: #047857;
+}
+
+.forest-graph-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.forest-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.forest-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 1.5px solid transparent;
+  display: inline-block;
+}
+
+.forest-graph-hint {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.forest-graph-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forest-graph-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.forest-graph-icon-btn:hover {
+  background-color: #f1f5f9;
+}
+
+.forest-graph-zoom-label {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.forest-graph-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  min-height: 490px;
+}
+
+@media (max-width: 900px) {
+  .forest-graph-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.forest-graph-canvas-wrap {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: radial-gradient(circle at 50% 45%, #f0fdf4 0%, #f8fafc 65%, #f1f5f9 100%);
+  overflow: hidden;
+  min-height: 480px;
+  cursor: grab;
+  user-select: none;
+}
+
+.forest-graph-canvas-wrap:active {
+  cursor: grabbing;
+}
+
+.forest-graph-svg {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  display: block;
+}
+
+.forest-contour-ring {
+  fill: none;
+  stroke: rgba(16, 185, 129, 0.16);
+  stroke-width: 1.4;
+  stroke-dasharray: 8 6;
+}
+
+.forest-graph-edge {
+  stroke: #94a3b8;
+  stroke-width: 2;
+  stroke-opacity: 0.72;
+  transition: stroke 0.15s, stroke-opacity 0.15s, stroke-width 0.15s;
+}
+
+.forest-graph-edge.outgoing-highlight {
+  stroke: #0d9488;
+  stroke-width: 3;
+  stroke-opacity: 0.95;
+}
+
+.forest-graph-edge.incoming-highlight {
+  stroke: #2563eb;
+  stroke-width: 3;
+  stroke-opacity: 0.95;
+}
+
+.forest-graph-edge.dimmed {
+  stroke-opacity: 0.18;
+}
+
+.forest-graph-node {
+  cursor: pointer;
+  transition: opacity 0.15s;
+  outline: none;
+}
+
+.forest-graph-node.dimmed {
+  opacity: 0.3;
+}
+
+.forest-node-aura {
+  fill: rgba(255, 255, 255, 0.76);
+  stroke: rgba(148, 163, 184, 0.45);
+  stroke-width: 1.5;
+  transition: stroke 0.15s, fill 0.15s, stroke-width 0.15s;
+}
+
+.forest-graph-node.active-tab .forest-node-aura {
+  fill: rgba(236, 253, 245, 0.9);
+  stroke: #10b981;
+  stroke-width: 2.2;
+}
+
+.forest-graph-node.selected .forest-node-aura {
+  fill: rgba(224, 242, 254, 0.92);
+  stroke: #0284c7;
+  stroke-width: 3;
+}
+
+.forest-node-label-bg {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: #cbd5e1;
+  stroke-width: 1;
+}
+
+.forest-node-label-text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: #0f172a;
+}
+
+.forest-node-count-bg {
+  fill: #0f172a;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.forest-node-count-text {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #ffffff;
+}
+
+.forest-graph-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 460px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.forest-graph-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+}
+
+.inspector-hero {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inspector-title-block {
+  min-width: 0;
+  flex: 1;
+}
+
+.inspector-source-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #059669;
+  margin-bottom: 2px;
+}
+
+.inspector-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.inspector-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inspector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: #f1f5f9;
+  color: #334155;
+}
+
+.inspector-stats-grid {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.inspector-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.inspector-modified {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.inspector-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.inspector-empty {
+  margin: 0;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.inspector-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.inspector-link-chip {
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #0f172a;
+}
+
+.inspector-link-chip.outgoing {
+  border-color: #99f6e4;
+  background-color: #f0fdfa;
+  color: #0f766e;
+}
+
+.inspector-link-chip.incoming {
+  border-color: #bfdbfe;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.inspector-open-btn {
+  margin-top: auto;
+  justify-content: center;
+  background-color: #059669 !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+}
+
+.inspector-open-btn:hover {
+  background-color: #047857 !important;
+}
+
+/* Dark theme overrides for Issue #6 */
+.app-container.theme-dark .forest-view-toggle {
+  background-color: #111827;
+  border-color: #334155;
+}
+
+.app-container.theme-dark .forest-view-toggle-btn {
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .forest-view-toggle-btn.active {
+  background-color: #1e293b;
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .forest-graph-toolbar,
+.app-container.theme-dark .forest-graph-inspector {
+  background-color: #111827;
+  border-color: #1f2937;
+}
+
+.app-container.theme-dark .forest-season-toggle-btn,
+.app-container.theme-dark .forest-graph-icon-btn {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .forest-season-toggle-btn.active {
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .forest-legend-chip,
+.app-container.theme-dark .forest-graph-zoom-label,
+.app-container.theme-dark .inspector-stats-grid {
+  color: #cbd5e1;
+}
+
+.app-container.theme-dark .forest-graph-canvas-wrap {
+  border-color: #334155;
+  background: radial-gradient(circle at 50% 45%, #0b241d 0%, #0f172a 70%, #020617 100%);
+}
+
+.app-container.theme-dark .forest-node-aura {
+  fill: rgba(15, 23, 42, 0.78);
+  stroke: rgba(100, 116, 139, 0.55);
+}
+
+.app-container.theme-dark .forest-graph-node.active-tab .forest-node-aura {
+  fill: rgba(6, 78, 59, 0.65);
+  stroke: #34d399;
+}
+
+.app-container.theme-dark .forest-graph-node.selected .forest-node-aura {
+  fill: rgba(12, 74, 110, 0.7);
+  stroke: #38bdf8;
+}
+
+.app-container.theme-dark .forest-node-label-bg {
+  fill: rgba(15, 23, 42, 0.92);
+  stroke: #334155;
+}
+
+.app-container.theme-dark .forest-node-label-text,
+.app-container.theme-dark .inspector-title {
+  color: #f8fafc;
+  fill: #f8fafc;
+}
+
+.app-container.theme-dark .inspector-pill {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .inspector-section {
+  border-top-color: #1f2937;
+}
+
+.app-container.theme-dark .inspector-link-chip.outgoing {
+  background-color: rgba(13, 148, 136, 0.16);
+  border-color: rgba(45, 212, 191, 0.45);
+  color: #5eead4;
+}
+
+.app-container.theme-dark .inspector-link-chip.incoming {
+  background-color: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #93c5fd;
+}

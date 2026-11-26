@@ -1,3 +1,5 @@
+import type { ForestFolderEntry, WorkspaceState } from './workspace';
+
 export interface ElectronFilePayload {
   filePath: string;
   fileName: string;
@@ -56,6 +58,18 @@ export interface ElectronScanFolderResult {
   files: ElectronScannedMmFile[];
 }
 
+export type ElectronScanFolderByPathResult =
+  | {
+      ok: true;
+      result: ElectronScanFolderResult;
+      state: WorkspaceState;
+    }
+  | {
+      ok: false;
+      code?: 'NOT_FOUND' | 'NOT_ALLOWED';
+      error: string;
+    };
+
 export interface ElectronAPI {
   isElectron: boolean;
   getAppInfo?: () => Promise<ElectronAppInfo>;
@@ -71,6 +85,16 @@ export interface ElectronAPI {
   ) => Promise<ElectronSaveDialogResult>;
   pickTargetMmFile: (baseFilePath?: string) => Promise<ElectronPickLinkResult | null>;
   scanMmFolder?: () => Promise<ElectronScanFolderResult | null>;
+  getWorkspaceState?: () => Promise<WorkspaceState>;
+  removeRecentFile?: (filePath: string) => Promise<WorkspaceState>;
+  clearRecentFiles?: () => Promise<WorkspaceState>;
+  pickForestFolder?: () => Promise<{
+    state: WorkspaceState;
+    addedFolder: ForestFolderEntry | null;
+  }>;
+  addForestFolder?: (folderPath: string) => Promise<WorkspaceState>;
+  removeForestFolder?: (folderPath: string) => Promise<WorkspaceState>;
+  scanMmFolderByPath?: (folderPath: string) => Promise<ElectronScanFolderByPathResult>;
   confirmUnsaved: (title: string) => Promise<'save' | 'discard' | 'cancel'>;
   onRequestClose: (callback: () => void) => () => void;
   confirmAppClose: () => void;
@@ -81,4 +105,3 @@ declare global {
     electronAPI?: ElectronAPI;
   }
 }
-

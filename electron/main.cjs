@@ -62,6 +62,7 @@ if (!gotLock) {
         try {
           const content = fs.readFileSync(fileArg, 'utf8');
           settingsStore?.saveLastUsedDir(path.dirname(fileArg));
+          settingsStore?.addRecentFile(fileArg);
           allowWriteIfMm(fileArg);
           mainWindow.webContents.send('app:openFile', {
             filePath: fileArg,
@@ -190,6 +191,7 @@ app.whenReady().then(() => {
     try {
       const content = fs.readFileSync(initialFilePath, 'utf8');
       settingsStore?.saveLastUsedDir(path.dirname(initialFilePath));
+      settingsStore?.addRecentFile(initialFilePath);
       allowWriteIfMm(initialFilePath);
       const result = {
         filePath: initialFilePath,
@@ -234,6 +236,7 @@ app.whenReady().then(() => {
       return null;
     }
     settingsStore?.saveLastUsedDir(path.dirname(filePath));
+    settingsStore?.addRecentFile(filePath);
     allowWriteIfMm(filePath);
     return {
       filePath,
@@ -260,6 +263,7 @@ app.whenReady().then(() => {
     try {
       const content = fs.readFileSync(resolved, 'utf8');
       allowWriteIfMm(resolved);
+      settingsStore?.addRecentFile(resolved);
       return {
         ok: true,
         filePath: resolved,
@@ -286,6 +290,7 @@ app.whenReady().then(() => {
     try {
       fs.writeFileSync(filePath, content, 'utf8');
       settingsStore?.saveLastUsedDir(path.dirname(filePath));
+      settingsStore?.addRecentFile(filePath);
       return { ok: true, filePath };
     } catch (err) {
       return {
@@ -321,6 +326,7 @@ app.whenReady().then(() => {
     }
     allowWrite(res.filePath);
     settingsStore?.saveLastUsedDir(path.dirname(res.filePath));
+    settingsStore?.addRecentFile(res.filePath);
     return {
       canceled: false,
       filePath: res.filePath,
@@ -373,8 +379,113 @@ app.whenReady().then(() => {
     });
     if (res.canceled || res.filePaths.length === 0) return null;
     const rootDir = res.filePaths[0];
-    settingsStore?.saveLastUsedDir(rootDir);
+    settingsStore?.saveLastScannedFolder(rootDir);
     return await scanMmDirectory(rootDir);
+  });
+
+  ipcMain.handle('workspace:getState', () => {
+    return settingsStore?.getWorkspaceState() || { recentFiles: [], forestFolders: [] };
+  });
+
+  ipcMain.handle('workspace:removeRecentFile', (_event, filePath) => {
+    return settingsStore?.removeRecentFile(filePath) || { recentFiles: [], forestFolders: [] };
+  });
+
+  ipcMain.handle('workspace:clearRecentFiles', () => {
+    return settingsStore?.clearRecentFiles() || { recentFiles: [], forestFolders: [] };
+  });
+
+  ipcMain.handle('workspace:pickForestFolder', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return {
+        state: settingsStore?.getWorkspaceState() || { recentFiles: [], forestFolders: [] },
+        addedFolder: null,
+      };
+    }
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: '森フォルダ（ワークスペース）を登録',
+      defaultPath: settingsStore?.getLastUsedDir(),
+      properties: ['openDirectory'],
+    });
+    if (res.canceled || res.filePaths.length === 0) {
+      return {
+        state: settingsStore?.getWorkspaceState() || { recentFiles: [], forestFolders: [] },
+        addedFolder: null,
+      };
+    }
+    const folderPath = path.normalize(res.filePaths[0]);
+    settingsStore?.saveLastUsedDir(folderPath);
+    const state = settingsStore?.addForestFolder(folderPath) || {
+      recentFiles: [],
+      forestFolders: [],
+    };
+    const targetKey = pathKey(folderPath);
+    const addedFolder =
+      state.forestFolders.find(f => pathKey(f.folderPath) === targetKey) || null;
+    return { state, addedFolder };
+  });
+
+  ipcMain.handle('workspace:addForestFolder', (_event, folderPath) => {
+    const currentState = settingsStore?.getWorkspaceState() || {
+      recentFiles: [],
+      forestFolders: [],
+    };
+    if (typeof folderPath !== 'string' || !folderPath.trim()) {
+      return currentState;
+    }
+    const targetKey = pathKey(folderPath);
+    const lastUsed = settingsStore?.getLastUsedDir();
+    const isAuthorized =
+      (currentState.lastScannedFolder && pathKey(currentState.lastScannedFolder) === targetKey) ||
+      currentState.forestFolders.some(f => pathKey(f.folderPath) === targetKey) ||
+      (lastUsed && pathKey(lastUsed) === targetKey);
+    if (!isAuthorized) {
+      return currentState;
+    }
+    return settingsStore?.addForestFolder(folderPath) || currentState;
+  });
+
+  ipcMain.handle('workspace:removeForestFolder', (_event, folderPath) => {
+    return settingsStore?.removeForestFolder(folderPath) || { recentFiles: [], forestFolders: [] };
+  });
+
+  ipcMain.handle('workspace:scanFolderByPath', async (_event, folderPath) => {
+    if (typeof folderPath !== 'string' || !folderPath.trim()) {
+      return { ok: false, code: 'NOT_ALLOWED', error: 'フォルダパスが不正です' };
+    }
+    const resolved = path.resolve(folderPath);
+    const targetKey = pathKey(resolved);
+    const currentState = settingsStore?.getWorkspaceState() || {
+      recentFiles: [],
+      forestFolders: [],
+    };
+    const isAuthorized =
+      currentState.forestFolders.some(f => pathKey(f.folderPath) === targetKey) ||
+      (currentState.lastScannedFolder && pathKey(currentState.lastScannedFolder) === targetKey);
+    if (!isAuthorized) {
+      return {
+        ok: false,
+        code: 'NOT_ALLOWED',
+        error: 'このフォルダのスキャンは許可されていません',
+      };
+    }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        error: 'フォルダが見つかりません',
+      };
+    }
+    try {
+      const result = await scanMmDirectory(resolved);
+      const state = settingsStore?.saveLastScannedFolder(resolved) || currentState;
+      return { ok: true, result, state };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   });
 
   ipcMain.handle('dialog:confirmUnsaved', async (_event, title) => {

@@ -334,10 +334,15 @@ export function buildGhostSubtreeFromPreview(
 export function injectPortalSubtrees(
   root: FreeMindNode,
   resolvedPortals?: Map<string, ResolvedPortalPreview>
-): { augmentedRoot: FreeMindNode; ghostMetaMap: Map<string, GhostNodeMeta> } {
+): {
+  augmentedRoot: FreeMindNode;
+  ghostMetaMap: Map<string, GhostNodeMeta>;
+  portalEntryIds: Set<string>;
+} {
   const ghostMetaMap = new Map<string, GhostNodeMeta>();
+  const portalEntryIds = new Set<string>();
   if (!resolvedPortals || resolvedPortals.size === 0) {
-    return { augmentedRoot: root, ghostMetaMap };
+    return { augmentedRoot: root, ghostMetaMap, portalEntryIds };
   }
 
   const visit = (node: FreeMindNode, inheritedSide?: NodePosition): FreeMindNode => {
@@ -358,6 +363,7 @@ export function injectPortalSubtrees(
     }
 
     const { entryNode, ghostMetaMap: portalMeta } = buildGhostSubtreeFromPreview(portal);
+    portalEntryIds.add(entryNode.id);
     for (const [k, v] of portalMeta.entries()) {
       ghostMetaMap.set(k, v);
     }
@@ -380,5 +386,5 @@ export function injectPortalSubtrees(
   };
 
   const augmentedRoot = visit(root);
-  return { augmentedRoot, ghostMetaMap };
+  return { augmentedRoot, ghostMetaMap, portalEntryIds };
 }

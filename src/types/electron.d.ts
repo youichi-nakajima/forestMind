@@ -50,6 +50,7 @@ export interface ElectronScannedMmFile {
   relativePath: string;
   xmlContent: string;
   fileSize: number;
+  modifiedTimeMs?: number;
 }
 
 export interface ElectronScanFolderResult {
@@ -68,6 +69,26 @@ export type ElectronScanFolderByPathResult =
       ok: false;
       code?: 'NOT_FOUND' | 'NOT_ALLOWED';
       error: string;
+    };
+
+export interface ElectronConfirmTrashPayload {
+  title: string;
+  filePath: string;
+  backlinkCount?: number;
+  hasUnsavedChanges?: boolean;
+}
+
+export type ElectronTrashMmResult =
+  | {
+      ok: true;
+      filePath: string;
+      state: WorkspaceState;
+    }
+  | {
+      ok: false;
+      code?: 'NOT_ALLOWED' | 'NOT_FOUND' | 'TRASH_FAILED';
+      error: string;
+      state?: WorkspaceState;
     };
 
 export interface ElectronAPI {
@@ -96,6 +117,8 @@ export interface ElectronAPI {
   removeForestFolder?: (folderPath: string) => Promise<WorkspaceState>;
   scanMmFolderByPath?: (folderPath: string) => Promise<ElectronScanFolderByPathResult>;
   confirmUnsaved: (title: string) => Promise<'save' | 'discard' | 'cancel'>;
+  confirmTrashMmFile?: (payload: ElectronConfirmTrashPayload) => Promise<boolean>;
+  trashMmFile?: (filePath: string) => Promise<ElectronTrashMmResult>;
   onRequestClose: (callback: () => void) => () => void;
   confirmAppClose: () => void;
 }

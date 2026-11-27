@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeForestFolder: folderPath => ipcRenderer.invoke('workspace:removeForestFolder', folderPath),
   scanMmFolderByPath: folderPath => ipcRenderer.invoke('workspace:scanFolderByPath', folderPath),
   confirmUnsaved: title => ipcRenderer.invoke('dialog:confirmUnsaved', title),
+  confirmTrashMmFile: payload => ipcRenderer.invoke('dialog:confirmTrashMmFile', payload),
+  trashMmFile: filePath => ipcRenderer.invoke('file:trashMmFile', filePath),
   onRequestClose: callback => {
     const listener = () => callback();
     ipcRenderer.on('app:requestClose', listener);

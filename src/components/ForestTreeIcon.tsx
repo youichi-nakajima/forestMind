@@ -14,7 +14,7 @@ interface ForestTreeIconProps {
 /**
  * Custom botanical SVG tree silhouette representing map scale, depth, and hub role (6 species).
  */
-export const ForestTreeIcon: React.FC<ForestTreeIconProps> = ({
+export const ForestTreeIcon: React.FC<ForestTreeIconProps> = React.memo(({
   species,
   canopyFill,
   canopyStroke,
@@ -177,4 +177,6 @@ export const ForestTreeIcon: React.FC<ForestTreeIconProps> = ({
       )}
     </svg>
   );
-};
+});
+
+ForestTreeIcon.displayName = 'ForestTreeIcon';

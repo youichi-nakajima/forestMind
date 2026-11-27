@@ -1,4 +1,5 @@
 import { FreeMindNode, NodePosition } from '../types/freemind';
+import { isPortalCapableLink } from './portalNodes';
 import { getNodePlainText } from './treeUtils';
 
 export interface LayoutNode {
@@ -59,6 +60,9 @@ export const CLOUD_PALETTE = [
 const HORIZONTAL_GAP = 68;
 const VERTICAL_GAP = 16;
 const DEFAULT_NODE_HEIGHT = 32;
+const PORTAL_TOP_EXTRA = 52;
+const PORTAL_BOTTOM_EXTRA = 28;
+const PORTAL_HORIZONTAL_EXTRA = 24;
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 function getMeasureContext(): CanvasRenderingContext2D | null {
@@ -115,9 +119,9 @@ export function estimateNodeDimensions(
   if (node.icons && node.icons.length > 0) {
     textWidth += node.icons.length * 20 + 6;
   }
-  // Extra width for link indicator
+  // Extra width for link indicator & portal toggle button
   if (node.link) {
-    textWidth += 20;
+    textWidth += isPortalCapableLink(node.link) ? 44 : 20;
   }
   // Extra width for note indicator
   if (node.noteHtml) {
@@ -151,12 +155,16 @@ export function estimateNodeDimensions(
 /**
  * Compute positions for all visible nodes in the mindmap.
  */
-export function computeLayout(rootNode: FreeMindNode): {
+export function computeLayout(
+  rootNode: FreeMindNode,
+  options?: { portalEntryIds?: Set<string> }
+): {
   layoutNodes: Map<string, LayoutNode>;
   edges: EdgePath[];
   arrowLinks: RenderArrowLink[];
   clouds: RenderCloud[];
 } {
+  const portalEntryIds = options?.portalEntryIds;
   const layoutMap = new Map<string, LayoutNode>();
   const edges: EdgePath[] = [];
   const arrowLinks: RenderArrowLink[] = [];
@@ -202,7 +210,8 @@ export function computeLayout(rootNode: FreeMindNode): {
       'right',
       rootLayout.x + rootLayout.width / 2 + HORIZONTAL_GAP,
       layoutMap,
-      edges
+      edges,
+      portalEntryIds
     );
 
     // Layout Left Subtree
@@ -212,7 +221,8 @@ export function computeLayout(rootNode: FreeMindNode): {
       'left',
       rootLayout.x - rootLayout.width / 2 - HORIZONTAL_GAP,
       layoutMap,
-      edges
+      edges,
+      portalEntryIds
     );
   }
 
@@ -727,24 +737,40 @@ function computeNodeBoundsAndClouds(
 
 interface SubtreeSize {
   totalHeight: number;
+  topExtra: number;
+  bottomExtra: number;
 }
 
-function calculateSubtreeHeight(node: FreeMindNode): SubtreeSize {
+function calculateSubtreeHeight(
+  node: FreeMindNode,
+  portalEntryIds?: Set<string>
+): SubtreeSize {
   const dim = estimateNodeDimensions(node);
   const cloudPadding = node.cloud ? 36 : 0;
+  const isPortalEntry = Boolean(portalEntryIds?.has(node.id));
+  const topExtra = isPortalEntry ? PORTAL_TOP_EXTRA : 0;
+  const bottomExtra = isPortalEntry ? PORTAL_BOTTOM_EXTRA : 0;
 
   if (node.folded || node.children.length === 0) {
-    return { totalHeight: dim.height + cloudPadding };
+    return {
+      totalHeight: dim.height + cloudPadding + topExtra + bottomExtra,
+      topExtra,
+      bottomExtra,
+    };
   }
 
   let childrenHeight = 0;
   for (const child of node.children) {
-    const childSize = calculateSubtreeHeight(child);
+    const childSize = calculateSubtreeHeight(child, portalEntryIds);
     childrenHeight += childSize.totalHeight + VERTICAL_GAP;
   }
   childrenHeight -= VERTICAL_GAP; // remove last gap
 
-  return { totalHeight: Math.max(dim.height, childrenHeight) + cloudPadding };
+  return {
+    totalHeight: Math.max(dim.height, childrenHeight) + cloudPadding + topExtra + bottomExtra,
+    topExtra,
+    bottomExtra,
+  };
 }
 
 function layoutBranch(
@@ -753,24 +779,33 @@ function layoutBranch(
   side: NodePosition,
   startX: number,
   layoutMap: Map<string, LayoutNode>,
-  edges: EdgePath[]
+  edges: EdgePath[],
+  portalEntryIds?: Set<string>
 ): void {
   if (nodes.length === 0) return;
 
   // Calculate height for all sibling subtrees
-  const heights = nodes.map(n => calculateSubtreeHeight(n).totalHeight);
-  const totalBranchHeight = heights.reduce((sum, h) => sum + h, 0) + (nodes.length - 1) * VERTICAL_GAP;
+  const sizes = nodes.map(n => calculateSubtreeHeight(n, portalEntryIds));
+  const totalBranchHeight =
+    sizes.reduce((sum, s) => sum + s.totalHeight, 0) + (nodes.length - 1) * VERTICAL_GAP;
 
   let currentY = parentLayout.y - totalBranchHeight / 2;
 
   nodes.forEach((node, i) => {
-    const subtreeHeight = heights[i];
-    const nodeY = currentY + subtreeHeight / 2;
+    const { totalHeight: subtreeHeight, topExtra, bottomExtra } = sizes[i];
+    const innerHeight = subtreeHeight - topExtra - bottomExtra;
+    const nodeY = currentY + topExtra + innerHeight / 2;
     const dim = estimateNodeDimensions(node);
 
-    const nodeX = side === 'right' 
-      ? startX + dim.width / 2 
-      : startX - dim.width / 2;
+    const effectiveStartX = portalEntryIds?.has(node.id)
+      ? side === 'right'
+        ? startX + PORTAL_HORIZONTAL_EXTRA
+        : startX - PORTAL_HORIZONTAL_EXTRA
+      : startX;
+
+    const nodeX = side === 'right'
+      ? effectiveStartX + dim.width / 2
+      : effectiveStartX - dim.width / 2;
 
     const layoutNode: LayoutNode = {
       node,
@@ -797,7 +832,7 @@ function layoutBranch(
         ? layoutNode.x + layoutNode.width / 2 + HORIZONTAL_GAP
         : layoutNode.x - layoutNode.width / 2 - HORIZONTAL_GAP;
 
-      layoutBranch(node.children, layoutNode, side, nextStartX, layoutMap, edges);
+      layoutBranch(node.children, layoutNode, side, nextStartX, layoutMap, edges, portalEntryIds);
     }
 
     currentY += subtreeHeight + VERTICAL_GAP;

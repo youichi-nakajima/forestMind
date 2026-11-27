@@ -65,31 +65,31 @@ export const DEFAULT_CANOPY_PALETTE = {
 export const SEASON_THEMES: Record<SeasonTheme, SeasonThemeInfo> = {
   spring: {
     season: 'spring',
-    label: '新緑 (3日以内)',
-    canopyFill: '#34d399',
-    canopyStroke: '#047857',
-    accent: '#10b981',
+    label: '今週 (7日以内)',
+    canopyFill: '#84cc16',
+    canopyStroke: '#4d7c0f',
+    accent: '#65a30d',
   },
   summer: {
     season: 'summer',
-    label: '深緑 (2週間以内)',
-    canopyFill: '#16a34a',
-    canopyStroke: '#166534',
-    accent: '#22c55e',
+    label: '今月 (30日以内)',
+    canopyFill: '#15803d',
+    canopyStroke: '#14532d',
+    accent: '#16a34a',
   },
   autumn: {
     season: 'autumn',
-    label: '紅葉 (45日以内)',
+    label: '今年 (1年以内)',
     canopyFill: '#f59e0b',
     canopyStroke: '#b45309',
     accent: '#ea580c',
   },
   winter: {
     season: 'winter',
-    label: '冬木立 (静穏期)',
-    canopyFill: '#64748b',
-    canopyStroke: '#334155',
-    accent: '#94a3b8',
+    label: 'それ以上 (1年超)',
+    canopyFill: '#991b1b',
+    canopyStroke: '#641212',
+    accent: '#b91c1c',
   },
 };
 
@@ -154,7 +154,11 @@ export function classifyTreeSpecies(
 }
 
 /**
- * Classifies map activity recency into one of 4 seasonal color palettes.
+ * Classifies map activity recency into one of 4 rolling seasonal color palettes:
+ * - spring: within 7 days (this week)
+ * - summer: within 30 days (this month)
+ * - autumn: within 365 days (this year)
+ * - winter: older than 365 days or unknown
  */
 export function classifyMapSeason(
   lastModifiedMs: number | undefined,
@@ -164,9 +168,9 @@ export function classifyMapSeason(
     return SEASON_THEMES.winter;
   }
   const ageDays = Math.max(0, (nowMs - lastModifiedMs) / DAY_MS);
-  if (ageDays <= 3) return SEASON_THEMES.spring;
-  if (ageDays <= 14) return SEASON_THEMES.summer;
-  if (ageDays <= 45) return SEASON_THEMES.autumn;
+  if (ageDays <= 7) return SEASON_THEMES.spring;
+  if (ageDays <= 30) return SEASON_THEMES.summer;
+  if (ageDays <= 365) return SEASON_THEMES.autumn;
   return SEASON_THEMES.winter;
 }
 
@@ -245,6 +249,18 @@ function computeSpeciesRadius(species: TreeSpecies): number {
   }
 }
 
+export function getNodeVisualExtents(node: Pick<ForestGraphNode, 'radius'>): {
+  halfW: number;
+  topH: number;
+  bottomH: number;
+} {
+  return {
+    halfW: Math.max(node.radius + 12, 98),
+    topH: node.radius + 16,
+    bottomH: node.radius + 40,
+  };
+}
+
 /**
  * Builds the Forest Knowledge Graph (deduplicated nodes, directional links/backlinks, and deterministic 2D layout).
  */
@@ -254,12 +270,36 @@ export function buildForestGraph(params: {
   activeForestFolder?: ActiveForestFolderData | null;
   recentFiles?: RecentFileEntry[];
   nowMs?: number;
+  scope?: 'all' | 'related';
+  focusNodeId?: string | null;
 }): ForestGraphData {
-  const { tabs, activeTabId, activeForestFolder, recentFiles = [], nowMs = 0 } = params;
+  const {
+    tabs,
+    activeTabId,
+    activeForestFolder,
+    recentFiles = [],
+    nowMs = 0,
+    scope = 'all',
+    focusNodeId = null,
+  } = params;
 
   const recentOpenedByPath = new Map<string, number>();
   for (const r of recentFiles) {
     recentOpenedByPath.set(normalizePathForCompare(r.filePath), r.lastOpenedAt);
+  }
+
+  const fileModifiedByPath = new Map<string, number>();
+  if (activeForestFolder) {
+    for (const fileItem of activeForestFolder.files) {
+      if (
+        fileItem.filePath &&
+        typeof fileItem.modifiedTimeMs === 'number' &&
+        Number.isFinite(fileItem.modifiedTimeMs) &&
+        fileItem.modifiedTimeMs > 0
+      ) {
+        fileModifiedByPath.set(normalizePathForCompare(fileItem.filePath), fileItem.modifiedTimeMs);
+      }
+    }
   }
 
   const nodes: ForestGraphNode[] = [];
@@ -272,7 +312,9 @@ export function buildForestGraph(params: {
     const species = classifyTreeSpecies(totalNodes, maxDepth, 0);
     const pathKey = tab.filePath ? normalizePathForCompare(tab.filePath) : '';
     const lastModifiedMs =
-      getMapLastModified(tab.map) || (pathKey ? recentOpenedByPath.get(pathKey) : undefined);
+      getMapLastModified(tab.map) ??
+      (pathKey ? fileModifiedByPath.get(pathKey) : undefined) ??
+      (pathKey ? recentOpenedByPath.get(pathKey) : undefined);
 
     const graphNode: ForestGraphNode = {
       id: graphId,
@@ -311,7 +353,9 @@ export function buildForestGraph(params: {
       const { totalNodes, maxDepth, mainBranches } = summarizeTree(fileItem.map.root);
       const species = classifyTreeSpecies(totalNodes, maxDepth, 0);
       const lastModifiedMs =
-        getMapLastModified(fileItem.map) || recentOpenedByPath.get(pathKey);
+        getMapLastModified(fileItem.map) ??
+        fileItem.modifiedTimeMs ??
+        recentOpenedByPath.get(pathKey);
 
       const graphNode: ForestGraphNode = {
         id: graphId,
@@ -398,49 +442,163 @@ export function buildForestGraph(params: {
     n.radius = computeSpeciesRadius(n.species);
   }
 
-  // Deterministic hub-centered layout
-  if (nodes.length === 1) {
-    nodes[0].x = 0;
-    nodes[0].y = 0;
-  } else if (nodes.length > 1) {
-    const ordered = [...nodes].sort((a, b) => {
+  // Filter to full connected component (Option A) when scope === 'related'
+  let activeNodes = nodes;
+  let activeEdges = edges;
+  if (scope === 'related' && nodes.length > 0) {
+    const anchorId =
+      (focusNodeId && nodeById.has(focusNodeId) ? focusNodeId : undefined) ||
+      (activeTabId && tabIdToGraphId.get(activeTabId)) ||
+      nodes[0].id;
+
+    const connectedIds = new Set<string>([anchorId]);
+    const queue: string[] = [anchorId];
+    while (queue.length > 0) {
+      const curId = queue.shift()!;
+      const cur = nodeById.get(curId);
+      if (!cur) continue;
+      for (const nextId of [...cur.outgoingIds, ...cur.incomingIds]) {
+        if (!connectedIds.has(nextId) && nodeById.has(nextId)) {
+          connectedIds.add(nextId);
+          queue.push(nextId);
+        }
+      }
+    }
+
+    activeNodes = nodes.filter(n => connectedIds.has(n.id));
+    activeEdges = edges.filter(
+      e => connectedIds.has(e.sourceId) && connectedIds.has(e.targetId)
+    );
+  }
+
+  // Deterministic 2D great-forest layout: group connected components into groves and expand both H & V
+  const hashStringUnit = (str: string, salt: number): number => {
+    let h = (2166136261 ^ salt) >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) / 4294967296;
+  };
+
+  if (activeNodes.length === 1) {
+    activeNodes[0].x = 0;
+    activeNodes[0].y = 0;
+  } else if (activeNodes.length > 1) {
+    const baseSorted = [...activeNodes].sort((a, b) => {
       const degA = a.incomingIds.length + a.outgoingIds.length;
       const degB = b.incomingIds.length + b.outgoingIds.length;
       if (degB !== degA) return degB - degA;
-      return b.totalNodes - a.totalNodes;
+      if (b.totalNodes !== a.totalNodes) return b.totalNodes - a.totalNodes;
+      return a.id.localeCompare(b.id);
     });
 
-    const goldenAngle = 2.399963229728653;
+    // Build connected-component groves via BFS starting from highest-degree hubs
+    const rankById = new Map(baseSorted.map((n, idx) => [n.id, idx]));
+    const visited = new Set<string>();
+    const components: ForestGraphNode[][] = [];
+    for (const seed of baseSorted) {
+      if (visited.has(seed.id)) continue;
+      const comp: ForestGraphNode[] = [];
+      const queue: ForestGraphNode[] = [seed];
+      visited.add(seed.id);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        comp.push(cur);
+        const neighborIds = [...cur.outgoingIds, ...cur.incomingIds].sort(
+          (a, b) => (rankById.get(a) ?? 0) - (rankById.get(b) ?? 0)
+        );
+        for (const nid of neighborIds) {
+          if (visited.has(nid)) continue;
+          const neighbor = nodeById.get(nid);
+          if (neighbor) {
+            visited.add(nid);
+            queue.push(neighbor);
+          }
+        }
+      }
+      components.push(comp);
+    }
+    components.sort((a, b) => {
+      if (b.length !== a.length) return b.length - a.length;
+      return (rankById.get(a[0].id) ?? 0) - (rankById.get(b[0].id) ?? 0);
+    });
+    const ordered = components.flat();
+
+    const cols = Math.max(2, Math.ceil(Math.sqrt(ordered.length * 1.2)));
+    const cellW = 290;
+    const cellH = 265;
     ordered.forEach((n, idx) => {
-      if (idx === 0) {
-        n.x = 0;
-        n.y = 0;
-      } else {
-        const angle = idx * goldenAngle;
-        const r = 175 + Math.sqrt(idx) * 115;
-        n.x = Math.cos(angle) * r;
-        n.y = Math.sin(angle) * r * 0.85;
-      }
+      const row = Math.floor(idx / cols);
+      const col = idx % cols;
+      const staggerX = row % 2 === 1 ? cellW * 0.42 : 0;
+      const jx = (hashStringUnit(n.id, 17) - 0.5) * cellW * 0.38;
+      const jy = (hashStringUnit(n.id, 53) - 0.5) * cellH * 0.38;
+      n.x = col * cellW + staggerX + jx;
+      n.y = row * cellH + jy;
     });
 
-    // Deterministic force relaxation + pairwise non-overlap separation
-    for (let iter = 0; iter < 70; iter++) {
-      // Weak gravity toward center
-      for (const n of ordered) {
-        n.x *= 0.985;
-        n.y *= 0.985;
+    const separatePair = (a: ForestGraphNode, b: ForestGraphNode, radialFactor: number): boolean => {
+      const extA = getNodeVisualExtents(a);
+      const extB = getNodeVisualExtents(b);
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      let changed = false;
+
+      if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+        dx = 17;
+        dy = 13;
       }
 
-      // Edge attraction toward comfortable spacing
-      for (const edge of edges) {
+      const reqX = extA.halfW + extB.halfW + 18;
+      const reqY = (dy >= 0 ? extA.bottomH + extB.topH : extB.bottomH + extA.topH) + 18;
+      const overlapX = reqX - Math.abs(dx);
+      const overlapY = reqY - Math.abs(dy);
+
+      if (overlapX > 0 && overlapY > 0) {
+        changed = true;
+        if (overlapX <= overlapY) {
+          const signX = dx >= 0 ? 1 : -1;
+          const pushX = overlapX * 0.5 + 1;
+          a.x -= signX * pushX;
+          b.x += signX * pushX;
+        } else {
+          const signY = dy >= 0 ? 1 : -1;
+          const pushY = overlapY * 0.5 + 1;
+          a.y -= signY * pushY;
+          b.y += signY * pushY;
+        }
+        dx = b.x - a.x;
+        dy = b.y - a.y;
+      }
+
+      const dist = Math.hypot(dx, dy) || 1;
+      const minCircleDist = a.radius + b.radius + 96;
+      if (dist < minCircleDist) {
+        changed = true;
+        const push = ((minCircleDist - dist) * radialFactor) + 0.5;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        a.x -= ux * push;
+        a.y -= uy * push;
+        b.x += ux * push;
+        b.y += uy * push;
+      }
+
+      return changed;
+    };
+
+    // Gentle edge springs + continuous repulsion without central circular gravity
+    for (let iter = 0; iter < 55; iter++) {
+      for (const edge of activeEdges) {
         const a = nodeById.get(edge.sourceId);
         const b = nodeById.get(edge.targetId);
         if (!a || !b) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const ideal = a.radius + b.radius + 145;
-        const delta = (dist - ideal) * 0.045;
+        const ideal = a.radius + b.radius + 205;
+        const delta = (dist - ideal) * 0.032;
         const ux = dx / dist;
         const uy = dy / dist;
         a.x += ux * delta;
@@ -449,61 +607,119 @@ export function buildForestGraph(params: {
         b.y -= uy * delta;
       }
 
-      // Repulsion & minimum non-overlap separation
       for (let i = 0; i < ordered.length; i++) {
         for (let j = i + 1; j < ordered.length; j++) {
-          const a = ordered[i];
-          const b = ordered[j];
-          let dx = b.x - a.x;
-          let dy = b.y - a.y;
-          let dist = Math.hypot(dx, dy);
-          if (dist < 0.01) {
-            dx = (j - i) * 1.5;
-            dy = 1;
-            dist = Math.hypot(dx, dy);
-          }
-          const minDist = a.radius + b.radius + 78;
-          if (dist < minDist) {
-            const push = (minDist - dist) * 0.52;
-            const ux = dx / dist;
-            const uy = dy / dist;
-            a.x -= ux * push;
-            a.y -= uy * push;
-            b.x += ux * push;
-            b.y += uy * push;
-          }
+          separatePair(ordered[i], ordered[j], 0.52);
         }
       }
     }
 
-    // Re-center centroid around (0, 0)
-    const cx = nodes.reduce((sum, n) => sum + n.x, 0) / nodes.length;
-    const cy = nodes.reduce((sum, n) => sum + n.y, 0) / nodes.length;
-    for (const n of nodes) {
+    // Strict zero-overlap convergence post-pass
+    for (let pass = 0; pass < 140; pass++) {
+      let moved = false;
+      for (let i = 0; i < ordered.length; i++) {
+        for (let j = i + 1; j < ordered.length; j++) {
+          if (separatePair(ordered[i], ordered[j], 0.5)) {
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+
+    // Re-center centroid around (0, 0) (translation preserves all pairwise distances)
+    const cx = activeNodes.reduce((sum, n) => sum + n.x, 0) / activeNodes.length;
+    const cy = activeNodes.reduce((sum, n) => sum + n.y, 0) / activeNodes.length;
+    for (const n of activeNodes) {
       n.x = Math.round((n.x - cx) * 10) / 10;
       n.y = Math.round((n.y - cy) * 10) / 10;
     }
   }
 
-  let bounds: ForestGraphBounds = { minX: -280, maxX: 280, minY: -220, maxY: 220 };
-  if (nodes.length > 0) {
+  let bounds: ForestGraphBounds = { minX: -320, maxX: 320, minY: -220, maxY: 220 };
+  if (activeNodes.length > 0) {
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
-    for (const n of nodes) {
-      minX = Math.min(minX, n.x - n.radius - 70);
-      maxX = Math.max(maxX, n.x + n.radius + 70);
-      minY = Math.min(minY, n.y - n.radius - 50);
-      maxY = Math.max(maxY, n.y + n.radius + 70);
+    for (const n of activeNodes) {
+      const ext = getNodeVisualExtents(n);
+      minX = Math.min(minX, n.x - ext.halfW);
+      maxX = Math.max(maxX, n.x + ext.halfW);
+      minY = Math.min(minY, n.y - ext.topH);
+      maxY = Math.max(maxY, n.y + ext.bottomH);
     }
     bounds = {
-      minX: Math.min(-240, minX - 60),
-      maxX: Math.max(240, maxX + 60),
-      minY: Math.min(-180, minY - 60),
-      maxY: Math.max(180, maxY + 60),
+      minX: Math.min(-320, minX - 80),
+      maxX: Math.max(320, maxX + 80),
+      minY: Math.min(-220, minY - 70),
+      maxY: Math.max(220, maxY + 70),
     };
   }
 
-  return { nodes, edges, bounds };
+  return { nodes: activeNodes, edges: activeEdges, bounds };
+}
+
+/**
+ * Counts how many unique maps across open tabs and the active Forest Folder
+ * contain at least one link targeting `targetFilePath`.
+ */
+export function countIncomingMapLinks(
+  targetFilePath: string,
+  tabs: MapTab[],
+  activeForestFolder?: ActiveForestFolderData | null
+): number {
+  const targetKey = normalizePathForCompare(targetFilePath);
+  if (!targetKey) return 0;
+
+  const targetTabIds = new Set<string>();
+  const sources: Array<{ filePath?: string; map: FreeMindMap }> = [];
+  const seenSourcePaths = new Set<string>();
+
+  for (const tab of tabs) {
+    sources.push({ filePath: tab.filePath, map: tab.map });
+    if (tab.filePath) {
+      const key = normalizePathForCompare(tab.filePath);
+      seenSourcePaths.add(key);
+      if (key === targetKey) {
+        targetTabIds.add(tab.id);
+      }
+    }
+  }
+
+  if (activeForestFolder) {
+    for (const item of activeForestFolder.files) {
+      const key = item.filePath ? normalizePathForCompare(item.filePath) : '';
+      if (key && seenSourcePaths.has(key)) continue;
+      if (key) seenSourcePaths.add(key);
+      sources.push({ filePath: item.filePath, map: item.map });
+    }
+  }
+
+  let count = 0;
+  for (const source of sources) {
+    const sourceKey = source.filePath ? normalizePathForCompare(source.filePath) : '';
+    if (sourceKey && sourceKey === targetKey) continue;
+
+    const links = collectMapLinks(source.map.root);
+    let matchesTarget = false;
+    for (const rawLink of links) {
+      const parsed = parseForestMindLink(rawLink);
+      if (parsed.kind === 'file' && parsed.filePath) {
+        const resolved = resolveRelativeMmPath(source.filePath, parsed.filePath);
+        if (normalizePathForCompare(resolved) === targetKey) {
+          matchesTarget = true;
+          break;
+        }
+      } else if (parsed.kind === 'forest' && parsed.tabId && targetTabIds.has(parsed.tabId)) {
+        matchesTarget = true;
+        break;
+      }
+    }
+    if (matchesTarget) {
+      count += 1;
+    }
+  }
+
+  return count;
 }

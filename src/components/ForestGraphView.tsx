@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MapTab } from '../hooks/useMindMap';
 import type { ActiveForestFolderData, RecentFileEntry } from '../types/workspace';
 import {
@@ -16,9 +16,16 @@ import {
   Calendar,
   ExternalLink,
   FileText,
+  Folder,
   GitBranch,
+  Maximize,
   Maximize2,
+  Minimize,
   Palette,
+  PanelRightClose,
+  PanelRightOpen,
+  Trash2,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -28,10 +35,17 @@ interface ForestGraphViewProps {
   activeTabId: string;
   activeForestFolder?: ActiveForestFolderData | null;
   recentFiles?: RecentFileEntry[];
+  scope?: 'all' | 'related';
+  onScopeChange?: (scope: 'all' | 'related') => void;
+  scopeFocusNodeId?: string | null;
+  onClearActiveForestFolder?: () => void;
   onOpenNode: (node: ForestGraphNode) => void;
+  onTrashMapFile?: (target: { filePath: string; title: string; backlinkCount?: number }) => void;
 }
 
 const SEASON_LEGEND_ORDER: SeasonTheme[] = ['spring', 'summer', 'autumn', 'winter'];
+const MIN_GRAPH_ZOOM = 0.25;
+const MAX_GRAPH_ZOOM = 3.5;
 
 function formatModifiedDate(ms?: number): string {
   if (!ms || !Number.isFinite(ms)) return '更新日時データなし';
@@ -51,16 +65,56 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
   activeTabId,
   activeForestFolder = null,
   recentFiles = [],
+  scope: controlledScope,
+  onScopeChange,
+  scopeFocusNodeId = null,
+  onClearActiveForestFolder,
   onOpenNode,
+  onTrashMapFile,
 }) => {
   const [nowMs] = useState<number>(() => Date.now());
   const [useSeasonColors, setUseSeasonColors] = useState(true);
+  const [internalScope, setInternalScope] = useState<'all' | 'related'>('all');
+  const scope = controlledScope ?? internalScope;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [lockedAnchorNodeId, setLockedAnchorNodeId] = useState<string | null>(
+    scopeFocusNodeId
+  );
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [zoomScale, setZoomScale] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [isPanning, setIsPanning] = useState(false);
+
+  const cameraRef = useRef({ x: 0, y: 0, scale: 1 });
+  const cameraGroupRef = useRef<SVGGElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const rafIdRef = useRef<number | null>(null);
   const isPanningRef = useRef(false);
-  const panStartRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ clientX: 0, clientY: 0, camX: 0, camY: 0 });
+  const dragUnitsPerPxRef = useRef(1);
+
+  useEffect(() => {
+    if (scopeFocusNodeId) {
+      setLockedAnchorNodeId(scopeFocusNodeId);
+    }
+  }, [scopeFocusNodeId]);
+
+  const effectiveAnchorNodeId =
+    scope === 'related'
+      ? scopeFocusNodeId || lockedAnchorNodeId || selectedNodeId || `tab:${activeTabId}`
+      : null;
+
+  const setScope = (nextScope: 'all' | 'related') => {
+    if (nextScope === 'related' && !scopeFocusNodeId) {
+      setLockedAnchorNodeId(selectedNodeId || `tab:${activeTabId}`);
+    } else if (nextScope === 'all') {
+      setLockedAnchorNodeId(null);
+    }
+    setInternalScope(nextScope);
+    onScopeChange?.(nextScope);
+  };
 
   const graph = useMemo(
     () =>
@@ -70,8 +124,10 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
         activeForestFolder,
         recentFiles,
         nowMs,
+        scope,
+        focusNodeId: effectiveAnchorNodeId,
       }),
-    [tabs, activeTabId, activeForestFolder, recentFiles, nowMs]
+    [tabs, activeTabId, activeForestFolder, recentFiles, nowMs, scope, effectiveAnchorNodeId]
   );
 
   const nodeMap = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
@@ -85,51 +141,228 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
   const focusId = hoveredNodeId || effectiveSelectedId;
   const selectedNode = effectiveSelectedId ? nodeMap.get(effectiveSelectedId) || null : null;
 
-  const connectedNeighborIds = useMemo(() => {
+  const hoveredNeighborIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!focusId) return ids;
-    ids.add(focusId);
-    const node = nodeMap.get(focusId);
+    if (!hoveredNodeId) return ids;
+    ids.add(hoveredNodeId);
+    const node = nodeMap.get(hoveredNodeId);
     if (node) {
       node.outgoingIds.forEach(id => ids.add(id));
       node.incomingIds.forEach(id => ids.add(id));
     }
     return ids;
-  }, [focusId, nodeMap]);
+  }, [hoveredNodeId, nodeMap]);
 
   const viewWidth = Math.max(560, graph.bounds.maxX - graph.bounds.minX);
   const viewHeight = Math.max(400, graph.bounds.maxY - graph.bounds.minY);
   const vbCenterX = (graph.bounds.minX + graph.bounds.maxX) / 2;
   const vbCenterY = (graph.bounds.minY + graph.bounds.maxY) / 2;
 
+  const applyCameraTransform = useCallback(() => {
+    const g = cameraGroupRef.current;
+    if (!g) return;
+    const { x, y, scale } = cameraRef.current;
+    g.setAttribute(
+      'transform',
+      `translate(${vbCenterX + x} ${vbCenterY + y}) scale(${scale}) translate(${-vbCenterX} ${-vbCenterY})`
+    );
+  }, [vbCenterX, vbCenterY]);
+
+  const scheduleCameraApply = useCallback(() => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = window.requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      applyCameraTransform();
+    });
+  }, [applyCameraTransform]);
+
+  useLayoutEffect(() => {
+    applyCameraTransform();
+  }, [applyCameraTransform, graph.nodes.length]);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
+
+  // Native non-passive wheel listener for smooth cursor-anchored zoom without outer scroll jitter
+  useEffect(() => {
+    const wrapEl = canvasWrapRef.current;
+    if (!wrapEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const cam = cameraRef.current;
+      const zoomFactor = Math.exp(-e.deltaY * 0.0014);
+      const nextScale = Math.max(
+        MIN_GRAPH_ZOOM,
+        Math.min(MAX_GRAPH_ZOOM, cam.scale * zoomFactor)
+      );
+
+      const svgEl = svgRef.current;
+      if (svgEl) {
+        const rect = svgEl.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const uniformScale = Math.min(rect.width / viewWidth, rect.height / viewHeight);
+          if (uniformScale > 0) {
+            const drawW = viewWidth * uniformScale;
+            const drawH = viewHeight * uniformScale;
+            const offsetX = rect.left + (rect.width - drawW) / 2;
+            const offsetY = rect.top + (rect.height - drawH) / 2;
+            const cursorSvgX = graph.bounds.minX + (e.clientX - offsetX) / uniformScale;
+            const cursorSvgY = graph.bounds.minY + (e.clientY - offsetY) / uniformScale;
+            const wx = (cursorSvgX - (vbCenterX + cam.x)) / cam.scale + vbCenterX;
+            const wy = (cursorSvgY - (vbCenterY + cam.y)) / cam.scale + vbCenterY;
+            cam.x = cursorSvgX - (wx - vbCenterX) * nextScale - vbCenterX;
+            cam.y = cursorSvgY - (wy - vbCenterY) * nextScale - vbCenterY;
+          }
+        }
+      }
+
+      cam.scale = nextScale;
+      scheduleCameraApply();
+      setZoomPercent(Math.round(nextScale * 100));
+    };
+
+    wrapEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => wrapEl.removeEventListener('wheel', handleWheel);
+  }, [graph.bounds.minX, graph.bounds.minY, viewWidth, viewHeight, vbCenterX, vbCenterY, scheduleCameraApply]);
+
+  // Keyboard shortcuts: F toggles fullscreen, Esc exits fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFullscreen(false);
+        return;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        setIsFullscreen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isFullscreen]);
+
+  const handleStepZoom = (factor: number) => {
+    const cam = cameraRef.current;
+    const nextScale = Math.max(MIN_GRAPH_ZOOM, Math.min(MAX_GRAPH_ZOOM, cam.scale * factor));
+    cam.scale = nextScale;
+    applyCameraTransform();
+    setZoomPercent(Math.round(nextScale * 100));
+  };
+
   const handleResetCamera = () => {
-    setZoomScale(1);
-    setPanOffset({ x: 0, y: 0 });
+    cameraRef.current = { x: 0, y: 0, scale: 1 };
+    applyCameraTransform();
+    setZoomPercent(100);
   };
 
   const focusOnNode = (targetId: string) => {
     setSelectedNodeId(targetId);
     const target = nodeMap.get(targetId);
     if (target) {
-      setPanOffset({
-        x: (vbCenterX - target.x) * zoomScale * 0.65,
-        y: (vbCenterY - target.y) * zoomScale * 0.65,
-      });
+      cameraRef.current.x = (vbCenterX - target.x) * cameraRef.current.scale * 0.65;
+      cameraRef.current.y = (vbCenterY - target.y) * cameraRef.current.scale * 0.65;
+      applyCameraTransform();
     }
   };
 
-  const contourRadii = [110, 195, 290, 395, 510, 635];
+  const contourPaths = useMemo(() => {
+    const left = graph.bounds.minX - 280;
+    const right = graph.bounds.maxX + 280;
+    const width = right - left;
+    const top = graph.bounds.minY - 80;
+    const bottom = graph.bounds.maxY + 80;
+    const bandCount = Math.max(7, Math.min(14, Math.round((bottom - top) / 220)));
+    const segments = 6;
+    const segW = width / segments;
+    const paths: string[] = [];
+
+    for (let b = 0; b < bandCount; b++) {
+      const baseY = top + ((bottom - top) * (b + 0.5)) / bandCount;
+      const amp = 24 + (b % 3) * 10;
+      const phase = b * 1.15;
+      let d = `M ${Math.round(left)} ${Math.round(baseY + Math.sin(phase) * amp)}`;
+      for (let s = 0; s < segments; s++) {
+        const x0 = left + s * segW;
+        const xMid = x0 + segW * 0.5;
+        const x1 = x0 + segW;
+        const cy = baseY + Math.sin(phase + (s + 0.5) * 1.4) * amp * 1.35;
+        const ey = baseY + Math.sin(phase + (s + 1) * 1.4) * amp;
+        d += ` Q ${Math.round(xMid)} ${Math.round(cy)} ${Math.round(x1)} ${Math.round(ey)}`;
+      }
+      paths.push(d);
+    }
+    return paths;
+  }, [graph.bounds.minX, graph.bounds.maxX, graph.bounds.minY, graph.bounds.maxY]);
 
   return (
-    <div className="forest-graph-shell">
+    <div className={`forest-graph-shell ${isFullscreen ? 'is-fullscreen' : ''}`}>
       {/* Toolbar & Legend */}
       <div className="forest-graph-toolbar">
         <div className="forest-graph-toolbar-left">
+          <div className="forest-scope-toggle" role="group" aria-label="表示範囲">
+            <button
+              type="button"
+              className={`forest-scope-btn ${scope === 'all' ? 'active' : ''}`}
+              aria-pressed={scope === 'all'}
+              onClick={() => setScope('all')}
+            >
+              森全体
+            </button>
+            <button
+              type="button"
+              className={`forest-scope-btn ${scope === 'related' ? 'active' : ''}`}
+              aria-pressed={scope === 'related'}
+              onClick={() => setScope('related')}
+            >
+              関連のみ
+            </button>
+          </div>
+
+          {activeForestFolder && (
+            <div className="forest-active-folder-pill" title={activeForestFolder.folderPath}>
+              <Folder size={13} />
+              <span>{activeForestFolder.name}</span>
+              {onClearActiveForestFolder && (
+                <button
+                  type="button"
+                  className="forest-active-folder-clear"
+                  title="森フォルダの読み込みを解除"
+                  aria-label="森フォルダの読み込みを解除"
+                  onClick={onClearActiveForestFolder}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className={`forest-season-toggle-btn ${useSeasonColors ? 'active' : ''}`}
             onClick={() => setUseSeasonColors(prev => !prev)}
-            title="更新頻度を季節カラー（新緑・深緑・紅葉・冬木立）で表示します"
+            title="更新時期を季節カラー（新緑・深緑・黄葉・深紅）で表示します"
           >
             <Palette size={14} />
             <span>季節カラー: {useSeasonColors ? 'ON' : 'OFF'}</span>
@@ -163,17 +396,17 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
             className="forest-graph-icon-btn"
             aria-label="グラフを縮小"
             title="縮小"
-            onClick={() => setZoomScale(prev => Math.max(0.45, Number((prev - 0.15).toFixed(2))))}
+            onClick={() => handleStepZoom(0.85)}
           >
             <ZoomOut size={14} />
           </button>
-          <span className="forest-graph-zoom-label">{Math.round(zoomScale * 100)}%</span>
+          <span className="forest-graph-zoom-label">{zoomPercent}%</span>
           <button
             type="button"
             className="forest-graph-icon-btn"
             aria-label="グラフを拡大"
             title="拡大"
-            onClick={() => setZoomScale(prev => Math.min(2.4, Number((prev + 0.15).toFixed(2))))}
+            onClick={() => handleStepZoom(1.18)}
           >
             <ZoomIn size={14} />
           </button>
@@ -186,35 +419,68 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
           >
             <Maximize2 size={14} />
           </button>
+          <button
+            type="button"
+            className="forest-graph-icon-btn"
+            aria-label={isInspectorOpen ? '詳細パネルを閉じる' : '詳細パネルを開く'}
+            title="詳細パネルを切り替え"
+            onClick={() => setIsInspectorOpen(prev => !prev)}
+          >
+            {isInspectorOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+          </button>
+          <button
+            type="button"
+            className={`forest-fullscreen-btn ${isFullscreen ? 'active' : ''}`}
+            aria-pressed={isFullscreen}
+            title={isFullscreen ? 'フルスクリーンを終了 (Esc)' : 'フルスクリーン表示 (F)'}
+            onClick={() => setIsFullscreen(prev => !prev)}
+          >
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+            <span>{isFullscreen ? '終了' : 'フルスクリーン'}</span>
+          </button>
         </div>
       </div>
 
       {/* Main Canvas + Inspector */}
-      <div className="forest-graph-body">
+      <div className={`forest-graph-body ${isInspectorOpen ? '' : 'inspector-hidden'}`}>
         <div
-          className="forest-graph-canvas-wrap"
-          onWheel={e => {
-            e.preventDefault();
-            const delta = e.deltaY < 0 ? 0.1 : -0.1;
-            setZoomScale(prev => Math.max(0.45, Math.min(2.4, Number((prev + delta).toFixed(2)))));
-          }}
+          ref={canvasWrapRef}
+          className={`forest-graph-canvas-wrap ${isPanning ? 'is-panning' : ''}`}
           onMouseDown={e => {
-            if ((e.target as HTMLElement).closest('.forest-graph-node')) return;
+            if (e.button !== 0 || (e.target as HTMLElement).closest('.forest-graph-node')) return;
             isPanningRef.current = true;
-            panStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+            setIsPanning(true);
+            const rect = svgRef.current?.getBoundingClientRect();
+            dragUnitsPerPxRef.current =
+              rect && rect.width > 0 && rect.height > 0
+                ? Math.max(viewWidth / rect.width, viewHeight / rect.height)
+                : 1;
+            panStartRef.current = {
+              clientX: e.clientX,
+              clientY: e.clientY,
+              camX: cameraRef.current.x,
+              camY: cameraRef.current.y,
+            };
           }}
           onMouseMove={e => {
             if (!isPanningRef.current) return;
-            setPanOffset({
-              x: e.clientX - panStartRef.current.x,
-              y: e.clientY - panStartRef.current.y,
-            });
+            cameraRef.current.x =
+              panStartRef.current.camX +
+              (e.clientX - panStartRef.current.clientX) * dragUnitsPerPxRef.current;
+            cameraRef.current.y =
+              panStartRef.current.camY +
+              (e.clientY - panStartRef.current.clientY) * dragUnitsPerPxRef.current;
+            scheduleCameraApply();
           }}
           onMouseUp={() => {
+            if (!isPanningRef.current) return;
             isPanningRef.current = false;
+            setIsPanning(false);
           }}
           onMouseLeave={() => {
+            if (!isPanningRef.current) return;
             isPanningRef.current = false;
+            setIsPanning(false);
           }}
         >
           {graph.nodes.length === 0 ? (
@@ -223,11 +489,12 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
             </div>
           ) : (
             <svg
+              ref={svgRef}
               className="forest-graph-svg"
               viewBox={`${graph.bounds.minX} ${graph.bounds.minY} ${viewWidth} ${viewHeight}`}
               preserveAspectRatio="xMidYMid meet"
               role="img"
-              aria-label="森林ナレッジグラフ"
+              aria-label="森林俯瞰表示"
             >
               <defs>
                 <marker
@@ -265,23 +532,11 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
                 </marker>
               </defs>
 
-              <g
-                transform={`translate(${vbCenterX + panOffset.x} ${
-                  vbCenterY + panOffset.y
-                }) scale(${zoomScale}) translate(${-vbCenterX} ${-vbCenterY})`}
-              >
-                {/* Topographic Contour Lines */}
+              <g ref={cameraGroupRef}>
+                {/* Topographic Woodland Ridge Waves */}
                 <g className="forest-contours" aria-hidden="true">
-                  {contourRadii.map((r, idx) => (
-                    <ellipse
-                      key={r}
-                      cx={0}
-                      cy={0}
-                      rx={r * 1.28}
-                      ry={r * 0.88}
-                      transform={`rotate(${(idx % 2 === 0 ? 1 : -1) * (idx * 7)})`}
-                      className="forest-contour-ring"
-                    />
+                  {contourPaths.map((d, idx) => (
+                    <path key={idx} d={d} className="forest-contour-ring" />
                   ))}
                 </g>
 
@@ -305,7 +560,6 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
                     const ex = dst.x - ux * endPad;
                     const ey = dst.y - uy * endPad;
 
-                    // Offset curve perpendicularly so bidirectional links separate cleanly
                     const perpSign = edge.isBidirectional ? 1 : 0.45;
                     const curveOffset = Math.min(44, dist * 0.16) * perpSign;
                     const cx = (sx + ex) / 2 - uy * curveOffset;
@@ -314,8 +568,10 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
 
                     const isOutgoingFromFocus = focusId === edge.sourceId;
                     const isIncomingToFocus = focusId === edge.targetId;
-                    const isHighlighted = isOutgoingFromFocus || isIncomingToFocus;
-                    const isDimmed = Boolean(focusId) && !isHighlighted;
+                    const isHoverHighlighted =
+                      hoveredNodeId !== null &&
+                      (hoveredNodeId === edge.sourceId || hoveredNodeId === edge.targetId);
+                    const isDimmed = hoveredNodeId !== null && !isHoverHighlighted;
 
                     const markerEnd = isOutgoingFromFocus
                       ? 'url(#fg-arrow-outgoing)'
@@ -343,12 +599,12 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
                 <g className="forest-graph-nodes">
                   {graph.nodes.map(node => {
                     const isSelected = effectiveSelectedId === node.id;
-                    const isConnected = connectedNeighborIds.has(node.id);
-                    const isDimmed = Boolean(focusId) && !isConnected;
+                    const isConnectedHover = hoveredNeighborIds.has(node.id);
+                    const isDimmed = hoveredNodeId !== null && !isConnectedHover;
                     const palette = useSeasonColors ? node.seasonInfo : DEFAULT_CANOPY_PALETTE;
                     const iconSize = Math.round(node.radius * 1.15);
                     const labelText =
-                      node.title.length > 18 ? `${node.title.slice(0, 17)}…` : node.title;
+                      node.title.length > 15 ? `${node.title.slice(0, 14)}…` : node.title;
 
                     return (
                       <g
@@ -391,13 +647,13 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
                           canopyStroke={palette.canopyStroke}
                           size={iconSize}
                         />
-                        <g transform={`translate(0, ${node.radius + 14})`}>
+                        <g transform={`translate(0, ${node.radius + 18})`}>
                           <rect
-                            x={-68}
-                            y={-11}
-                            width={136}
-                            height={22}
-                            rx={11}
+                            x={-92}
+                            y={-15}
+                            width={184}
+                            height={30}
+                            rx={15}
                             className="forest-node-label-bg"
                           />
                           <text
@@ -409,8 +665,8 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
                             {labelText}
                           </text>
                         </g>
-                        <g transform={`translate(${node.radius * 0.65}, ${-node.radius * 0.62})`}>
-                          <circle cx={0} cy={0} r={11} className="forest-node-count-bg" />
+                        <g transform={`translate(${node.radius * 0.68}, ${-node.radius * 0.64})`}>
+                          <circle cx={0} cy={0} r={13} className="forest-node-count-bg" />
                           <text
                             textAnchor="middle"
                             dominantBaseline="central"
@@ -429,7 +685,7 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
         </div>
 
         {/* Right-side Inspector Panel */}
-        {selectedNode && (
+        {isInspectorOpen && selectedNode && (
           <aside className="forest-graph-inspector" aria-label="選択中マップの詳細">
             <div className="inspector-hero">
               <ForestTreeIcon
@@ -483,6 +739,11 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
             <div className="inspector-modified">
               最終更新: {formatModifiedDate(selectedNode.lastModifiedMs)}
             </div>
+            {scope === 'related' && graph.nodes.length === 1 && (
+              <div className="inspector-scope-note">
+                リンクされている他マップがないため、このマップのみ表示中です。
+              </div>
+            )}
 
             {selectedNode.mainBranches.length > 0 && (
               <div className="inspector-section">
@@ -549,14 +810,32 @@ export const ForestGraphView: React.FC<ForestGraphViewProps> = ({
               )}
             </div>
 
-            <button
-              type="button"
-              className="toolbar-btn inspector-open-btn"
-              onClick={() => onOpenNode(selectedNode)}
-            >
-              <span>このマップを開く</span>
-              <ArrowRight size={14} />
-            </button>
+            <div className="inspector-footer-actions">
+              <button
+                type="button"
+                className="toolbar-btn inspector-open-btn"
+                onClick={() => onOpenNode(selectedNode)}
+              >
+                <span>このマップを開く</span>
+                <ArrowRight size={14} />
+              </button>
+              {onTrashMapFile && selectedNode.filePath && /\.mm$/i.test(selectedNode.filePath) && (
+                <button
+                  type="button"
+                  className="toolbar-btn inspector-trash-btn"
+                  onClick={() =>
+                    onTrashMapFile({
+                      filePath: selectedNode.filePath!,
+                      title: selectedNode.title,
+                      backlinkCount: selectedNode.incomingIds.length,
+                    })
+                  }
+                >
+                  <Trash2 size={14} />
+                  <span>ゴミ箱へ移動</span>
+                </button>
+              )}
+            </div>
           </aside>
         )}
       </div>

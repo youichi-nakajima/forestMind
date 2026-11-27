@@ -157,8 +157,29 @@ export function useWorkspace() {
     );
   }, []);
 
+  const applyWorkspaceState = useCallback((state: WorkspaceState) => {
+    setWorkspace(state);
+  }, []);
+
+  const removeFileFromActiveForestFolder = useCallback((filePath: string) => {
+    const targetKey = normalizeWorkspacePathKey(filePath);
+    setActiveForestFolder(prev =>
+      prev
+        ? {
+            ...prev,
+            files: prev.files.filter(
+              f => !f.filePath || normalizeWorkspacePathKey(f.filePath) !== targetKey
+            ),
+          }
+        : prev
+    );
+  }, []);
+
   const scanForestFolder = useCallback(
-    async (folderPath: string): Promise<ScanForestFolderResult> => {
+    async (
+      folderPath: string,
+      options?: { silent?: boolean }
+    ): Promise<ScanForestFolderResult> => {
       const apiScan = window.electronAPI?.scanMmFolderByPath;
       if (!apiScan) {
         return {
@@ -166,7 +187,9 @@ export function useWorkspace() {
           error: 'フォルダ再スキャンはデスクトップ版で利用できます。',
         };
       }
-      setIsScanningForestFolder(true);
+      if (!options?.silent) {
+        setIsScanningForestFolder(true);
+      }
       try {
         const res = await apiScan(folderPath);
         if (!res.ok) {
@@ -188,7 +211,9 @@ export function useWorkspace() {
           error: err instanceof Error ? err.message : String(err),
         };
       } finally {
-        setIsScanningForestFolder(false);
+        if (!options?.silent) {
+          setIsScanningForestFolder(false);
+        }
       }
     },
     []
@@ -203,12 +228,14 @@ export function useWorkspace() {
     activeForestFolder,
     isScanningForestFolder,
     refreshWorkspace,
+    applyWorkspaceState,
     recordRecentFile,
     removeRecentFile,
     clearRecentFiles,
     pickAndAddForestFolder,
     addForestFolder,
     removeForestFolder,
+    removeFileFromActiveForestFolder,
     scanForestFolder,
     clearActiveForestFolder,
   };

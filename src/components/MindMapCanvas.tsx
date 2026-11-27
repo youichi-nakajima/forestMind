@@ -177,8 +177,33 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   spotlightNodeIds,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
+  const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const livePanRef = useRef<{ x: number; y: number }>(panOffset);
+  const panRafRef = useRef<number | null>(null);
+  const zoomScaleRef = useRef(zoomScale);
+  const panOffsetRef = useRef(panOffset);
+
+  useEffect(() => {
+    zoomScaleRef.current = zoomScale;
+  }, [zoomScale]);
+
+  useEffect(() => {
+    panOffsetRef.current = panOffset;
+    if (!isPanningRef.current) {
+      livePanRef.current = panOffset;
+    }
+  }, [panOffset]);
+
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null) {
+        window.cancelAnimationFrame(panRafRef.current);
+      }
+    };
+  }, []);
   const [editingText, setEditingText] = useState('');
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [isMinimapCollapsed, setIsMinimapCollapsed] = useState(false);
@@ -210,15 +235,15 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     return resolvedPortals;
   }, [isPresentationActive, resolvedPortals]);
 
-  const { augmentedRoot, ghostMetaMap } = useMemo(
+  const { augmentedRoot, ghostMetaMap, portalEntryIds } = useMemo(
     () => injectPortalSubtrees(effectiveRoot, effectivePortals),
     [effectiveRoot, effectivePortals]
   );
 
   // Compute layout tree, curved edge paths, arrow links, and clouds
   const { layoutNodes, edges, arrowLinks, clouds } = useMemo(() => {
-    return computeLayout(augmentedRoot);
-  }, [augmentedRoot]);
+    return computeLayout(augmentedRoot, { portalEntryIds });
+  }, [augmentedRoot, portalEntryIds]);
 
   const portalContainers = useMemo(() => {
     if (ghostMetaMap.size === 0) return [];
@@ -226,6 +251,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       string,
       {
         sourceNodeId: string;
+        side: 'left' | 'right';
         minX: number;
         maxX: number;
         minY: number;
@@ -246,10 +272,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       const right = lNode.x + lNode.width / 2;
       const top = lNode.y - lNode.height / 2;
       const bottom = lNode.y + lNode.height / 2;
+      const nodeSide: 'left' | 'right' = lNode.side === 'left' ? 'left' : 'right';
       const existing = grouped.get(meta.portalSourceNodeId);
       if (!existing) {
         grouped.set(meta.portalSourceNodeId, {
           sourceNodeId: meta.portalSourceNodeId,
+          side: nodeSide,
           minX: left,
           maxX: right,
           minY: top,
@@ -268,17 +296,22 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         existing.maxY = Math.max(existing.maxY, bottom);
         if (meta.isPortalEntry) {
           existing.targetNodeId = meta.originalNodeId;
+          existing.side = nodeSide;
         }
       }
     }
 
-    return Array.from(grouped.values()).map(box => ({
-      ...box,
-      x: box.minX - 16,
-      y: box.minY - 36,
-      width: Math.max(210, box.maxX - box.minX + 32),
-      height: box.maxY - box.minY + 52,
-    }));
+    return Array.from(grouped.values()).map(box => {
+      const width = Math.max(240, box.maxX - box.minX + 32);
+      const x = box.side === 'left' ? box.maxX + 16 - width : box.minX - 16;
+      return {
+        ...box,
+        x,
+        y: box.minY - 38,
+        width,
+        height: box.maxY - box.minY + 54,
+      };
+    });
   }, [ghostMetaMap, layoutNodes]);
 
   useEffect(() => {
@@ -287,7 +320,18 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     }
   }, [isPresentationActive]);
 
-  const mapBounds = useMemo(() => computeMapBounds(layoutNodes, clouds), [layoutNodes, clouds]);
+  const mapBounds = useMemo(() => {
+    const base = computeMapBounds(layoutNodes, clouds);
+    if (portalContainers.length === 0) return base;
+    let { minX, maxX, minY, maxY } = base;
+    for (const box of portalContainers) {
+      minX = Math.min(minX, box.x);
+      maxX = Math.max(maxX, box.x + box.width);
+      minY = Math.min(minY, box.y);
+      maxY = Math.max(maxY, box.y + box.height);
+    }
+    return { minX, maxX, minY, maxY };
+  }, [layoutNodes, clouds, portalContainers]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -366,11 +410,19 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     }
   }, [editingNodeId, layoutNodes]);
 
-  // Canvas Mouse Pan Handlers
+  const applyPanTransformDom = useCallback((x: number, y: number) => {
+    if (!viewportRef.current) return;
+    viewportRef.current.style.transform = `translate(${x}px, ${y}px) scale(${zoomScaleRef.current})`;
+  }, []);
+
+  // Canvas Mouse Pan Handlers (RAF DOM transform to avoid per-pixel React re-renders)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0 && (e.target === containerRef.current || (e.target as HTMLElement).tagName === 'svg')) {
+      isPanningRef.current = true;
       setIsPanning(true);
-      panStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+      const currentPan = panOffsetRef.current;
+      livePanRef.current = currentPan;
+      panStartRef.current = { x: e.clientX - currentPan.x, y: e.clientY - currentPan.y };
       setSelectedNodeId(null);
       setEditingNodeId(null);
       setNotePopover(null);
@@ -379,27 +431,62 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning) {
-      setPanOffset(() => ({
-        x: e.clientX - panStartRef.current.x,
-        y: e.clientY - panStartRef.current.y,
-      }));
+    if (!isPanningRef.current) return;
+    const nextX = e.clientX - panStartRef.current.x;
+    const nextY = e.clientY - panStartRef.current.y;
+    livePanRef.current = { x: nextX, y: nextY };
+    if (panRafRef.current === null) {
+      panRafRef.current = window.requestAnimationFrame(() => {
+        panRafRef.current = null;
+        applyPanTransformDom(livePanRef.current.x, livePanRef.current.y);
+      });
     }
   };
 
-  const handleMouseUp = () => {
+  const commitPanEnd = () => {
+    if (!isPanningRef.current) return;
+    isPanningRef.current = false;
     setIsPanning(false);
+    if (panRafRef.current !== null) {
+      window.cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    }
+    const finalPan = livePanRef.current;
+    setPanOffset(() => finalPan);
   };
 
-  // Zoom with Wheel
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-    setZoomScale(prev => {
-      const next = prev * zoomFactor;
-      return Math.min(Math.max(next, 0.25), 3.0);
-    });
-  };
+  // Native non-passive wheel listener for smooth cursor-anchored zoom
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    if (!containerEl) return;
+
+    const onNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const prevScale = zoomScaleRef.current;
+      const zoomFactor = Math.exp(-e.deltaY * 0.0012);
+      const nextScale = Math.min(Math.max(prevScale * zoomFactor, 0.25), 3.0);
+      if (nextScale === prevScale) return;
+
+      const rect = containerEl.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const ratio = nextScale / prevScale;
+      const curPan = isPanningRef.current ? livePanRef.current : panOffsetRef.current;
+      const nextPan = {
+        x: px - (px - curPan.x) * ratio,
+        y: py - (py - curPan.y) * ratio,
+      };
+
+      zoomScaleRef.current = nextScale;
+      livePanRef.current = nextPan;
+      panOffsetRef.current = nextPan;
+      setZoomScale(() => nextScale);
+      setPanOffset(() => nextPan);
+    };
+
+    containerEl.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => containerEl.removeEventListener('wheel', onNativeWheel);
+  }, [setZoomScale, setPanOffset]);
 
   // Global Keyboard Shortcuts
   const handleKeyDown = useCallback(
@@ -799,10 +886,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       className={`mindmap-canvas-container ${isPanning ? 'panning' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
+      onMouseUp={commitPanEnd}
+      onMouseLeave={commitPanEnd}
     >
       <div
+        ref={viewportRef}
         className={`mindmap-viewport ${isPresentationActive ? 'presentation-mode' : ''} ${isPresentationActive && !isPanning ? 'smooth-transition' : ''
           }`}
         style={{
@@ -955,7 +1043,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               <div
                 key={`portal-header-${box.sourceNodeId}`}
                 className={`portal-container-header status-${box.status}`}
-                style={{ left: `${box.x + 10}px`, top: `${box.y + 6}px` }}
+                style={{
+                  left: `${box.x + 10}px`,
+                  top: `${box.y + 6}px`,
+                  maxWidth: `${box.width - 16}px`,
+                }}
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => e.stopPropagation()}
               >

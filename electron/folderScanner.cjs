@@ -56,6 +56,7 @@ async function scanMmDirectory(rootDir) {
             relativePath: currentRelPath || '.',
             xmlContent,
             fileSize: fileStat.size,
+            modifiedTimeMs: Math.round(fileStat.mtimeMs),
           });
         } catch (err) {
           console.warn(`Failed to read ${fullPath}:`, err);

@@ -51,17 +51,19 @@ Edit details of the selected node in the right-side inspector:
 | Icons | Built-in FreeMind icons (✅ ❌ 🚩 ⭐ 💡 🚀 ✏️ 🌲 📁 ❓ 🔖 📎, etc.) |
 | Attributes | Arbitrary Key-Value pairs |
 
-### 🌳 Multi-Tab, Forest View & Knowledge Graph (v2.0.0)
+### 🌳 Multi-Tab, Forest View & Forest Overview Map (v2.0.0)
 
 - Edit multiple mind maps simultaneously in tabs
   - **Drag-and-drop reordering**: rearrange open tabs with a visual drop indicator (tab order is persisted)
   - **Pin-to-lock tabs**: click a tab's left icon to pin it on the left and hide the close button to prevent accidental closing (pinned state is persisted)
+  - **Tab Context Menu**: right-click any tab to pin/unpin, close, open **Related Overview** for that map, or safely move a saved `.mm` file to the OS Trash/Recycle Bin
 - **Forest Folders (Workspaces) & Recent Files**: bookmark up to 12 frequently used `.mm` directories for one-click browsing and scoped search, plus quick access to up to 15 recently opened `.mm` files from both the toolbar dropdown and Forest View
+- **Safe Map Deletion (OS Trash / Recycle Bin)**: move saved `.mm` files to the OS Trash from Forest View cards, the Overview Inspector, or the tab context menu, with unsaved-changes and incoming backlink warnings plus automatic tab, recent-file, and folder cleanup
 - **Branch Split & Merge**: extract a large branch (or currently focused subtree) into a new standalone `.mm` file or tab via the context menu (updating the origin node with a relative `.mm` / `forest://` link, with optional branch collapse), or merge another open tab / external `.mm` file cleanly under any node with automatic ID remapping
 - **Tree-to-Tree Portal Preview (Ghost Nodes)**: toggle inline read-only ghost subtree previews right on the canvas for nodes linking to external `.mm` (`#NODE_ID` supported) or `forest://` maps, enclosed in a dashed portal container with one-click jump to open in its own tab
-- **Forest View & Forest Knowledge Graph**:
+- **Forest View (`カード表示` / `俯瞰表示`)**:
   - **Cards View**: node count, max depth, main topic preview, and deduplicated cross-search across open tabs and active Forest Folders
-  - **Knowledge Graph View**: **6 botanical tree SVG species** classified by map scale and depth, optional **Season Colors** by last-modified recency (spring / summer / autumn / winter), directional forward/backlink Bezier edges, topographic contours, zoom/pan, and a right-side inspector panel
+  - **Forest Overview Map** (toggled inside Forest View or via `Ctrl+Shift+G`): **6 botanical tree SVG species** classified by scale/depth/hub links, 4-stage rolling **Season Colors** (this week / this month / this year / older than 1 year in deep maple red, using XML timestamps or OS file mtime), 2D great-forest layout with topographic ridge waves, fullscreen mode (`F` / `Esc`), smooth pan & cursor-anchored wheel zoom, **Full Forest vs. Related Network** scope toggle (with one-click entry from the map toolbar or tab context menu), active Forest Folder clear chip, and a right-side inspector panel
 
 ### ▶️ Presentation Mode (Thought Replay)
 
@@ -138,6 +140,8 @@ Scan a local folder recursively to search across `.mm` files:
 | `→` / `←` | Move to child / parent node |
 | `Space` | Fold / unfold node |
 | `Ctrl` + `Shift` + `F` | Toggle Focus Mode (Hoist) on selected branch |
+| `Ctrl` + `Shift` + `G` | Toggle Forest Overview Map |
+| `F` / `Esc` (in Overview Map) | Toggle / exit fullscreen view |
 | `Ctrl` + `0` | Fit map to screen |
 | `Ctrl` + `S` | Save / Save As (Desktop) |
 | Drag background | Pan canvas |

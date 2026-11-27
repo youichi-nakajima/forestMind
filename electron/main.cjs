@@ -4,6 +4,7 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { createSettingsStore, resolveSaveDefaultPath } = require('./settingsStore.cjs');
 const { scanMmDirectory } = require('./folderScanner.cjs');
+const { MM_EXT_RE, normalizePathKey: pathKey, isMmTrashAllowed } = require('./fileSecurity.cjs');
 
 let mainWindow = null;
 let initialFilePath = null;
@@ -15,12 +16,6 @@ let settingsStore = null;
 // so that compromised renderer content cannot write arbitrary files.
 const writableFilePaths = new Set();
 const READABLE_EXT_RE = /\.(mm|md|txt)$/i;
-const MM_EXT_RE = /\.mm$/i;
-
-function pathKey(filePath) {
-  const resolved = path.resolve(filePath);
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
 
 function allowWrite(filePath) {
   if (typeof filePath === 'string' && filePath) {
@@ -503,6 +498,92 @@ app.whenReady().then(() => {
     if (res.response === 0) return 'save';
     if (res.response === 1) return 'discard';
     return 'cancel';
+  });
+
+  ipcMain.handle('dialog:confirmTrashMmFile', async (_event, payload) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    const { title, filePath, backlinkCount, hasUnsavedChanges } = payload || {};
+    const displayTitle =
+      (typeof title === 'string' && title.trim()) ||
+      (typeof filePath === 'string' && filePath ? path.basename(filePath) : '') ||
+      'マインドマップ';
+    const detailLines = [];
+    if (typeof filePath === 'string' && filePath.trim()) {
+      detailLines.push(`対象ファイル: ${filePath}`);
+    }
+    if (hasUnsavedChanges) {
+      detailLines.push('※ このマップには未保存の変更があります。');
+    }
+    if (typeof backlinkCount === 'number' && backlinkCount > 0) {
+      detailLines.push(
+        `※ 他の ${backlinkCount} 件のマップからリンクされています（削除するとリンク切れになります）。`
+      );
+    }
+    detailLines.push('OS のゴミ箱へ移動されるため、必要に応じて後から復元できます。');
+
+    const res = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'マインドマップをゴミ箱へ移動',
+      message: `「${displayTitle}」をゴミ箱へ移動しますか？`,
+      detail: detailLines.join('\n'),
+      buttons: ['ゴミ箱へ移動', 'キャンセル'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    return res.response === 0;
+  });
+
+  ipcMain.handle('file:trashMmFile', async (_event, filePath) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) {
+      return { ok: false, code: 'NOT_ALLOWED', error: 'ファイルパスが不正です' };
+    }
+    const resolved = path.resolve(filePath.trim());
+    const currentState = settingsStore?.getWorkspaceState() || {
+      recentFiles: [],
+      forestFolders: [],
+    };
+    const allowed = isMmTrashAllowed(resolved, {
+      writableFileKeys: writableFilePaths,
+      forestFolders: currentState.forestFolders.map(f => f.folderPath),
+      lastScannedFolder: currentState.lastScannedFolder,
+    });
+    if (!allowed) {
+      return {
+        ok: false,
+        code: 'NOT_ALLOWED',
+        error: 'このファイルの削除は許可されていません（開いている .mm または森フォルダ配下の .mm のみ対象です）',
+      };
+    }
+    if (!fs.existsSync(resolved)) {
+      writableFilePaths.delete(pathKey(resolved));
+      const state = settingsStore?.removeRecentFile(resolved) || currentState;
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        error: 'ファイルが見つかりませんでした',
+        state,
+      };
+    }
+    if (!fs.statSync(resolved).isFile()) {
+      return {
+        ok: false,
+        code: 'NOT_ALLOWED',
+        error: 'ファイル以外はゴミ箱へ移動できません',
+      };
+    }
+    try {
+      await shell.trashItem(resolved);
+      writableFilePaths.delete(pathKey(resolved));
+      const state = settingsStore?.removeRecentFile(resolved) || currentState;
+      return { ok: true, filePath: resolved, state };
+    } catch (err) {
+      return {
+        ok: false,
+        code: 'TRASH_FAILED',
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   });
 
   ipcMain.on('app:confirmClose', () => {

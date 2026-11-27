@@ -30,5 +30,6 @@ export interface ScannedFileItem {
   xmlContent?: string;
   map: FreeMindMap;
   fileSize: number;
+  modifiedTimeMs?: number;
 }
 

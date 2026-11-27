@@ -20,6 +20,7 @@ export interface RawScannedMmFile {
   relativePath: string;
   xmlContent: string;
   fileSize: number;
+  modifiedTimeMs?: number;
 }
 
 function createScannedFileItem(raw: RawScannedMmFile): ScannedFileItem {
@@ -29,6 +30,7 @@ function createScannedFileItem(raw: RawScannedMmFile): ScannedFileItem {
     relativePath: raw.relativePath,
     map: parseFreeMindXml(raw.xmlContent),
     fileSize: raw.fileSize,
+    modifiedTimeMs: raw.modifiedTimeMs,
   };
 }
 
@@ -89,14 +91,15 @@ export async function scanDirectoryHandle(
           try {
             const file = await (entry as FileSystemFileHandle).getFile();
             const text = await file.text();
-            items.push(
-              createScannedFileItem({
-                fileName: entry.name,
-                relativePath: currentPath || '.',
-                xmlContent: text,
-                fileSize: file.size,
-              })
-            );
+              items.push(
+                createScannedFileItem({
+                  fileName: entry.name,
+                  relativePath: currentPath || '.',
+                  xmlContent: text,
+                  fileSize: file.size,
+                  modifiedTimeMs: file.lastModified || undefined,
+                })
+              );
             if (onProgress) {
               onProgress(items.length, entry.name);
             }
@@ -145,6 +148,7 @@ export async function scanFileList(
           relativePath: relFolder,
           xmlContent: text,
           fileSize: file.size,
+          modifiedTimeMs: file.lastModified || undefined,
         })
       );
 

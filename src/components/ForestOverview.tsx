@@ -27,6 +27,7 @@ import {
   X,
   LayoutGrid,
   Network,
+  Trash2,
 } from 'lucide-react';
 
 interface ForestOverviewProps {
@@ -35,6 +36,11 @@ interface ForestOverviewProps {
   onSelectTabAndNode: (tabId: string, nodeId?: string) => void;
   onNewTab: () => void;
   onCloseOverview: () => void;
+  viewMode?: 'cards' | 'graph';
+  onViewModeChange?: (mode: 'cards' | 'graph') => void;
+  graphScope?: 'all' | 'related';
+  onGraphScopeChange?: (scope: 'all' | 'related') => void;
+  graphScopeFocusNodeId?: string | null;
   recentFiles?: RecentFileEntry[];
   forestFolders?: ForestFolderEntry[];
   activeForestFolder?: ActiveForestFolderData | null;
@@ -48,6 +54,7 @@ interface ForestOverviewProps {
   onSearchInForestFolder?: (folderPath: string) => void;
   onClearActiveForestFolder?: () => void;
   onOpenScannedMap?: (map: FreeMindMap, title: string, nodeId: string, filePath?: string) => void;
+  onTrashMapFile?: (target: { filePath: string; title: string; backlinkCount?: number }) => void;
 }
 
 interface MapStats {
@@ -108,6 +115,11 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
   onSelectTabAndNode,
   onNewTab,
   onCloseOverview,
+  viewMode: controlledViewMode,
+  onViewModeChange,
+  graphScope,
+  onGraphScopeChange,
+  graphScopeFocusNodeId,
   recentFiles = [],
   forestFolders = [],
   activeForestFolder = null,
@@ -121,9 +133,15 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
   onSearchInForestFolder,
   onClearActiveForestFolder,
   onOpenScannedMap,
+  onTrashMapFile,
 }) => {
   const [globalQuery, setGlobalQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'cards' | 'graph'>('cards');
+  const [internalViewMode, setInternalViewMode] = useState<'cards' | 'graph'>('cards');
+  const viewMode = controlledViewMode ?? internalViewMode;
+  const setViewMode = (mode: 'cards' | 'graph') => {
+    setInternalViewMode(mode);
+    onViewModeChange?.(mode);
+  };
 
   const handleOpenGraphNode = (graphNode: ForestGraphNode) => {
     if (graphNode.tabId) {
@@ -274,8 +292,8 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
     Boolean(onPickAndAddForestFolder) || forestFolders.length > 0 || recentFiles.length > 0;
 
   return (
-    <div className="forest-overview-overlay">
-      <div className="forest-overview-container">
+    <div className={`forest-overview-overlay ${viewMode === 'graph' ? 'graph-mode' : ''}`}>
+      <div className={`forest-overview-container ${viewMode === 'graph' ? 'graph-mode' : ''}`}>
         {/* Header */}
         <div className="forest-header">
           <div className="forest-title-group">
@@ -305,7 +323,7 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
                 onClick={() => setViewMode('graph')}
               >
                 <Network size={14} />
-                <span>ナレッジグラフ</span>
+                <span>俯瞰表示</span>
               </button>
             </div>
             <button className="toolbar-btn secondary" onClick={onCloseOverview}>
@@ -320,7 +338,12 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
             activeTabId={activeTabId}
             activeForestFolder={activeForestFolder}
             recentFiles={recentFiles}
+            scope={graphScope}
+            onScopeChange={onGraphScopeChange}
+            scopeFocusNodeId={graphScopeFocusNodeId}
+            onClearActiveForestFolder={onClearActiveForestFolder}
             onOpenNode={handleOpenGraphNode}
+            onTrashMapFile={onTrashMapFile}
           />
         ) : (
           <>
@@ -580,6 +603,20 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
                       <span className="tree-emoji">🌲</span>
                       <h4 className="tree-title">{title}</h4>
                       {openTab && <span className="current-badge">開いています</span>}
+                      {onTrashMapFile && item.filePath && /\.mm$/i.test(item.filePath) && (
+                        <button
+                          type="button"
+                          className="tree-card-trash-btn"
+                          title="この .mm ファイルをゴミ箱へ移動"
+                          aria-label={`${title} をゴミ箱へ移動`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            onTrashMapFile({ filePath: item.filePath!, title });
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
 
                     <div className="folder-map-relpath" title={item.filePath || item.fileName}>
@@ -647,6 +684,20 @@ export const ForestOverview: React.FC<ForestOverviewProps> = ({
                   <span className="tree-emoji">🌳</span>
                   <h4 className="tree-title">{title}</h4>
                   {isCurrent && <span className="current-badge">選択中</span>}
+                  {onTrashMapFile && tab.filePath && /\.mm$/i.test(tab.filePath) && (
+                    <button
+                      type="button"
+                      className="tree-card-trash-btn"
+                      title="この .mm ファイルをゴミ箱へ移動"
+                      aria-label={`${title} をゴミ箱へ移動`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onTrashMapFile({ filePath: tab.filePath!, title });
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="tree-metrics">

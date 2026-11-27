@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MapTab } from '../hooks/useMindMap';
-import { Plus, X, FileSpreadsheet, Trees, Pin } from 'lucide-react';
+import { Plus, X, FileSpreadsheet, Trees, Pin, Network, Trash2 } from 'lucide-react';
 
 interface TabBarProps {
   tabs: MapTab[];
@@ -12,6 +12,8 @@ interface TabBarProps {
   onReorderTabs?: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
   isForestViewOpen?: boolean;
   onToggleForestView?: () => void;
+  onOpenTabRelatedOverview?: (tabId: string) => void;
+  onTrashMapFile?: (target: { filePath: string; title: string }) => void;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -24,12 +26,53 @@ export const TabBar: React.FC<TabBarProps> = ({
   onReorderTabs,
   isForestViewOpen,
   onToggleForestView,
+  onOpenTabRelatedOverview,
+  onTrashMapFile,
 }) => {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     tabId: string;
     position: 'before' | 'after';
   } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    tabId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const contextMenuTab = contextMenu ? tabs.find(t => t.id === contextMenu.tabId) : undefined;
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    if (!contextMenuTab) {
+      setContextMenu(null);
+      return;
+    }
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+    const handleDismiss = () => setContextMenu(null);
+
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleDismiss);
+    window.addEventListener('resize', handleDismiss);
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleDismiss);
+      window.removeEventListener('resize', handleDismiss);
+    };
+  }, [contextMenu, contextMenuTab]);
 
   const draggedTab = draggingTabId ? tabs.find(t => t.id === draggingTabId) : undefined;
 
@@ -37,6 +80,7 @@ export const TabBar: React.FC<TabBarProps> = ({
     <div className="tab-bar">
       {onToggleForestView && (
         <button
+          type="button"
           className={`forest-view-toggle-btn ${isForestViewOpen ? 'active' : ''}`}
           title="全マップの森林俯瞰ビュー・横断検索を表示"
           onClick={onToggleForestView}
@@ -76,6 +120,10 @@ export const TabBar: React.FC<TabBarProps> = ({
                 } ${isDropAfter ? 'drop-after' : ''}`}
                 draggable={Boolean(onReorderTabs) && tabs.length > 1}
                 onClick={() => onSelectTab(tab.id)}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  setContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+                }}
                 onDragStart={e => {
                   if (!onReorderTabs || tabs.length <= 1) return;
                   setDraggingTabId(tab.id);
@@ -183,6 +231,96 @@ export const TabBar: React.FC<TabBarProps> = ({
       <button className="tab-new-btn" title="新しいマインドマップを作成" onClick={onNewTab}>
         <Plus size={14} />
       </button>
+
+      {contextMenu && contextMenuTab && (
+        <div
+          ref={menuRef}
+          className="node-context-menu tab-context-menu"
+          role="menu"
+          aria-label="タブ操作メニュー"
+          style={{
+            left:
+              typeof window !== 'undefined'
+                ? Math.max(8, Math.min(contextMenu.x, window.innerWidth - 220))
+                : contextMenu.x,
+            top:
+              typeof window !== 'undefined'
+                ? Math.max(8, Math.min(contextMenu.y, window.innerHeight - 160))
+                : contextMenu.y,
+          }}
+        >
+          <div className="context-menu-header">
+            {contextMenuTab.map.root.text || contextMenuTab.title || '無題マップ'}
+          </div>
+          {onTogglePinTab && (
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
+              onClick={() => {
+                onTogglePinTab(contextMenuTab.id);
+                setContextMenu(null);
+              }}
+            >
+              <Pin size={14} className="context-menu-icon" />
+              <span className="context-menu-label">
+                {contextMenuTab.isPinned ? 'ピン止めを解除' : 'タブをピン止め'}
+              </span>
+            </button>
+          )}
+          {onOpenTabRelatedOverview && (
+            <button
+              type="button"
+              role="menuitem"
+              className="context-menu-item"
+              onClick={() => {
+                setContextMenu(null);
+                onOpenTabRelatedOverview(contextMenuTab.id);
+              }}
+            >
+              <Network size={14} className="context-menu-icon" />
+              <span className="context-menu-label">このマップの関連を俯瞰表示</span>
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            className="context-menu-item"
+            disabled={Boolean(contextMenuTab.isPinned) || tabs.length <= 1}
+            onClick={() => {
+              onCloseTab(contextMenuTab.id);
+              setContextMenu(null);
+            }}
+          >
+            <X size={14} className="context-menu-icon" />
+            <span className="context-menu-label">タブを閉じる</span>
+          </button>
+          {onTrashMapFile &&
+            contextMenuTab.filePath &&
+            /\.mm$/i.test(contextMenuTab.filePath) && (
+              <>
+                <div className="context-menu-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="context-menu-item danger"
+                  onClick={() => {
+                    const targetTitle =
+                      contextMenuTab.map.root.text || contextMenuTab.title || '無題マップ';
+                    setContextMenu(null);
+                    onTrashMapFile({
+                      filePath: contextMenuTab.filePath!,
+                      title: targetTitle,
+                    });
+                  }}
+                >
+                  <Trash2 size={14} className="context-menu-icon" />
+                  <span className="context-menu-label">ファイルをゴミ箱へ移動</span>
+                </button>
+              </>
+            )}
+        </div>
+      )}
     </div>
   );
 };

@@ -52,6 +52,7 @@ import {
   toggleIconOnNodes,
   type QuickColorPreset,
 } from './utils/quickStyle';
+import { countIncomingMapLinks } from './utils/forestGraph';
 
 export const App: React.FC = () => {
   const {
@@ -67,6 +68,7 @@ export const App: React.FC = () => {
     openFileInTab,
     reconcileTabWithDisk,
     closeTab,
+    removeTabsByFilePath,
     togglePinTab,
     reorderTabs,
     map,
@@ -117,6 +119,9 @@ export const App: React.FC = () => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPropertiesOpen, setIsPropertiesOpen] = useState(true);
   const [isForestViewOpen, setIsForestViewOpen] = useState(false);
+  const [forestViewMode, setForestViewMode] = useState<'cards' | 'graph'>('cards');
+  const [graphScope, setGraphScope] = useState<'all' | 'related'>('all');
+  const [graphScopeRootTabId, setGraphScopeRootTabId] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isSearcherOpen, setIsSearcherOpen] = useState(false);
@@ -141,11 +146,13 @@ export const App: React.FC = () => {
     activeForestFolder,
     isScanningForestFolder,
     refreshWorkspace,
+    applyWorkspaceState,
     removeRecentFile,
     clearRecentFiles,
     pickAndAddForestFolder,
     addForestFolder,
     removeForestFolder,
+    removeFileFromActiveForestFolder,
     scanForestFolder,
     clearActiveForestFolder,
   } = useWorkspace();
@@ -1067,6 +1074,95 @@ export const App: React.FC = () => {
     }
   }, [pickAndAddForestFolder, handleSelectForestFolder, showToast]);
 
+  const handleTrashMapFile = useCallback(
+    async (target: { filePath: string; title: string; backlinkCount?: number }) => {
+      const api = window.electronAPI;
+      if (!api?.trashMmFile || !target.filePath || !/\.mm$/i.test(target.filePath)) {
+        return;
+      }
+
+      const targetKey = normalizePathForCompare(target.filePath);
+      const hasUnsavedChanges = tabsRef.current.some(
+        t => t.filePath && normalizePathForCompare(t.filePath) === targetKey && Boolean(t.isDirty)
+      );
+      const backlinkCount =
+        target.backlinkCount ??
+        countIncomingMapLinks(target.filePath, tabsRef.current, activeForestFolder);
+
+      const confirmed = api.confirmTrashMmFile
+        ? await api.confirmTrashMmFile({
+            title: target.title,
+            filePath: target.filePath,
+            backlinkCount,
+            hasUnsavedChanges,
+          })
+        : window.confirm(
+            `「${target.title}」をゴミ箱へ移動しますか？\n\n対象ファイル: ${target.filePath}`
+          );
+      if (!confirmed) {
+        return;
+      }
+
+      const res = await api.trashMmFile(target.filePath);
+      if (res.state) {
+        applyWorkspaceState(res.state);
+      }
+
+      if (!res.ok) {
+        if (res.code === 'NOT_FOUND') {
+          removeFileFromActiveForestFolder(target.filePath);
+          if (activeForestFolder) {
+            void scanForestFolder(activeForestFolder.folderPath, { silent: true });
+          }
+          showToast('ファイルが見つかりませんでした（一覧を更新しました）');
+        } else {
+          showToast(`ゴミ箱への移動に失敗しました: ${res.error || ''}`);
+        }
+        return;
+      }
+
+      const removedTabIds = removeTabsByFilePath(target.filePath);
+      if (removedTabIds.length > 0) {
+        setExpandedPortalsByTab(prev => {
+          let changed = false;
+          const next = { ...prev };
+          for (const id of removedTabIds) {
+            if (id in next) {
+              delete next[id];
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+      }
+
+      const resolvedKey = normalizePathForCompare(res.filePath);
+      setPortalFileCache(prev => {
+        if (!(targetKey in prev) && !(resolvedKey in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[targetKey];
+        delete next[resolvedKey];
+        return next;
+      });
+
+      removeFileFromActiveForestFolder(target.filePath);
+      if (activeForestFolder) {
+        void scanForestFolder(activeForestFolder.folderPath, { silent: true });
+      }
+      showToast(`🗑️ 「${target.title}」をゴミ箱へ移動しました`);
+    },
+    [
+      activeForestFolder,
+      applyWorkspaceState,
+      removeFileFromActiveForestFolder,
+      removeTabsByFilePath,
+      scanForestFolder,
+      showToast,
+    ]
+  );
+
   const handleDeleteNodeOrSelection = useCallback(
     (targetNodeId: string) => {
       if (effectiveSelectedNodeIds.length > 1 && effectiveSelectedNodeIds.includes(targetNodeId)) {
@@ -1411,6 +1507,49 @@ export const App: React.FC = () => {
     [expandedPortalsByTab, activeTabId, map.root, activeFilePath]
   );
 
+  const handleToggleForestView = useCallback(() => {
+    setIsForestViewOpen(prev => {
+      if (prev) return false;
+      setGraphScope('all');
+      setGraphScopeRootTabId(null);
+      return true;
+    });
+  }, []);
+
+  const handleToggleForestGraph = useCallback(() => {
+    setIsForestViewOpen(prev => {
+      if (prev && forestViewMode === 'graph') return false;
+      setGraphScope('all');
+      setGraphScopeRootTabId(null);
+      setForestViewMode('graph');
+      return true;
+    });
+  }, [forestViewMode]);
+
+  const handleOpenRelatedOverview = useCallback(
+    (targetTabId?: string) => {
+      const tid = targetTabId || activeTabId;
+      setGraphScopeRootTabId(tid);
+      setGraphScope('related');
+      setForestViewMode('graph');
+      setIsForestViewOpen(true);
+    },
+    [activeTabId]
+  );
+
+  useEffect(() => {
+    const handleGlobalGraphShortcut = (e: KeyboardEvent) => {
+      if (e.isComposing || isPresentationActive) return;
+      if (document.querySelector('.modal-backdrop')) return;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        handleToggleForestGraph();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalGraphShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalGraphShortcut);
+  }, [handleToggleForestGraph, isPresentationActive]);
+
   const handleOpenPortalTarget = useCallback(
     (target: PortalOpenTarget) => {
       if (target.kind === 'forest' && target.tabId) {
@@ -1461,6 +1600,7 @@ export const App: React.FC = () => {
       <Toolbar
         isForestViewOpen={isForestViewOpen}
         onCloseForestView={() => setIsForestViewOpen(false)}
+        onOpenRelatedOverview={() => handleOpenRelatedOverview(activeTabId)}
         onNewTab={() => {
           createNewTab();
           setIsForestViewOpen(false);
@@ -1558,7 +1698,9 @@ export const App: React.FC = () => {
         onTogglePinTab={togglePinTab}
         onReorderTabs={reorderTabs}
         isForestViewOpen={isForestViewOpen}
-        onToggleForestView={() => setIsForestViewOpen(prev => !prev)}
+        onToggleForestView={handleToggleForestView}
+        onOpenTabRelatedOverview={handleOpenRelatedOverview}
+        onTrashMapFile={window.electronAPI?.trashMmFile ? handleTrashMapFile : undefined}
       />
 
       {/* Main Canvas & Inspector Area */}
@@ -1567,6 +1709,22 @@ export const App: React.FC = () => {
           <ForestOverview
             tabs={tabs}
             activeTabId={activeTabId}
+            viewMode={forestViewMode}
+            onViewModeChange={mode => {
+              setForestViewMode(mode);
+              if (mode === 'cards') {
+                setGraphScope('all');
+                setGraphScopeRootTabId(null);
+              }
+            }}
+            graphScope={graphScope}
+            onGraphScopeChange={nextScope => {
+              setGraphScope(nextScope);
+              if (nextScope === 'all') {
+                setGraphScopeRootTabId(null);
+              }
+            }}
+            graphScopeFocusNodeId={graphScopeRootTabId ? `tab:${graphScopeRootTabId}` : null}
             onSelectTabAndNode={(tabId, nodeId) => {
               setFocusedNodeId(null);
               if (nodeId) {
@@ -1602,6 +1760,7 @@ export const App: React.FC = () => {
             }
             onClearActiveForestFolder={clearActiveForestFolder}
             onOpenScannedMap={handleOpenSearcherNode}
+            onTrashMapFile={window.electronAPI?.trashMmFile ? handleTrashMapFile : undefined}
           />
         ) : (
           <>

@@ -244,7 +244,7 @@ export const initialFreeMindMap: FreeMindMap = {
           },
           {
             id: 'ID_L1_6',
-            text: '森林ナレッジグラフ（6種樹形・季節カラー・等高線マップ）',
+            text: '森林俯瞰表示（6種樹形・季節カラー・関連マップ俯瞰）',
             icons: [{ builtin: 'clanbomber' }],
             attributes: [],
             arrowLinks: [],

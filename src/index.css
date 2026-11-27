@@ -452,6 +452,7 @@ body {
   width: 0;
   height: 0;
   pointer-events: none;
+  will-change: transform;
 }
 
 .mindmap-edges-layer {
@@ -1056,8 +1057,9 @@ body {
   background-color: #fef3c7 !important;
 }
 
-/* Forest View Toggle Button in TabBar */
-.forest-view-toggle-btn {
+/* Forest View & Knowledge Graph Toggle Buttons in TabBar */
+.forest-view-toggle-btn,
+.forest-graph-quick-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1073,16 +1075,57 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.forest-graph-quick-btn {
+  color: #0f766e;
+  background-color: #f0fdfa;
+  border-color: #99f6e4;
 }
 
 .forest-view-toggle-btn:hover {
   background-color: #d1fae5;
 }
 
-.forest-view-toggle-btn.active {
+.forest-graph-quick-btn:hover {
+  background-color: #ccfbf1;
+}
+
+.tab-bar .forest-view-toggle-btn.active {
   background-color: #059669;
   color: #ffffff;
   border-color: #047857;
+}
+
+.tab-bar .forest-graph-quick-btn.active {
+  background-color: #0d9488;
+  color: #ffffff;
+  border-color: #0f766e;
+}
+
+.app-container.theme-dark .tab-bar .forest-view-toggle-btn {
+  background-color: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .tab-bar .forest-view-toggle-btn.active {
+  background-color: #059669;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.app-container.theme-dark .tab-bar .forest-graph-quick-btn {
+  background-color: rgba(20, 184, 166, 0.14);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #5eead4;
+}
+
+.app-container.theme-dark .tab-bar .forest-graph-quick-btn.active {
+  background-color: #0d9488;
+  border-color: #14b8a6;
+  color: #ffffff;
 }
 
 /* Forest Overview Overlay */
@@ -2485,7 +2528,7 @@ body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  z-index: 1000;
+  z-index: 1200;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5628,11 +5671,13 @@ body {
   gap: 3px;
 }
 
-.forest-view-toggle-btn {
+.forest-view-toggle .forest-view-toggle-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 5px 11px;
+  margin-right: 0;
+  height: auto;
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -5643,17 +5688,47 @@ body {
   transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.forest-view-toggle-btn.active {
+.forest-view-toggle .forest-view-toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.55);
+}
+
+.forest-view-toggle .forest-view-toggle-btn.active {
   background-color: #ffffff;
   color: #047857;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
+}
+
+.forest-overview-overlay.graph-mode {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+}
+
+.forest-overview-container.graph-mode {
+  max-width: none;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
 }
 
 .forest-graph-shell {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 540px;
+  flex: 1;
+  min-height: 480px;
+}
+
+.forest-graph-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  width: 100vw;
+  height: 100vh;
+  padding: 12px 16px;
+  background-color: var(--bg-canvas);
 }
 
 .forest-graph-toolbar {
@@ -5754,11 +5829,42 @@ body {
   color: #334155;
 }
 
+.forest-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  margin-left: 4px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.forest-fullscreen-btn:hover {
+  background-color: #f1f5f9;
+}
+
+.forest-fullscreen-btn.active {
+  background-color: #059669;
+  border-color: #047857;
+  color: #ffffff;
+}
+
 .forest-graph-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
   gap: 14px;
-  min-height: 490px;
+  flex: 1;
+  min-height: 0;
+}
+
+.forest-graph-body.inspector-hidden {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (max-width: 900px) {
@@ -5771,27 +5877,36 @@ body {
   position: relative;
   border-radius: 14px;
   border: 1px solid #cbd5e1;
-  background: radial-gradient(circle at 50% 45%, #f0fdf4 0%, #f8fafc 65%, #f1f5f9 100%);
+  background: linear-gradient(180deg, #f0fdf4 0%, #f7fee7 38%, #f8fafc 100%);
   overflow: hidden;
-  min-height: 480px;
+  min-height: 440px;
+  height: 100%;
   cursor: grab;
   user-select: none;
+  touch-action: none;
 }
 
-.forest-graph-canvas-wrap:active {
+.forest-graph-canvas-wrap:active,
+.forest-graph-canvas-wrap.is-panning {
   cursor: grabbing;
+}
+
+.forest-graph-canvas-wrap.is-panning .forest-graph-edge,
+.forest-graph-canvas-wrap.is-panning .forest-graph-node,
+.forest-graph-canvas-wrap.is-panning .forest-node-aura {
+  transition: none;
 }
 
 .forest-graph-svg {
   width: 100%;
   height: 100%;
-  min-height: 480px;
+  min-height: 440px;
   display: block;
 }
 
 .forest-contour-ring {
   fill: none;
-  stroke: rgba(16, 185, 129, 0.16);
+  stroke: rgba(16, 185, 129, 0.14);
   stroke-width: 1.4;
   stroke-dasharray: 8 6;
 }
@@ -5855,8 +5970,8 @@ body {
 }
 
 .forest-node-label-text {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
   fill: #0f172a;
 }
 
@@ -5867,7 +5982,7 @@ body {
 }
 
 .forest-node-count-text {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   fill: #ffffff;
 }
@@ -6010,8 +6125,14 @@ body {
   color: #1d4ed8;
 }
 
-.inspector-open-btn {
+.inspector-footer-actions {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspector-open-btn {
   justify-content: center;
   background-color: #059669 !important;
   border-color: #047857 !important;
@@ -6022,17 +6143,57 @@ body {
   background-color: #047857 !important;
 }
 
+.inspector-trash-btn {
+  justify-content: center;
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
+}
+
+.inspector-trash-btn:hover {
+  background-color: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #b91c1c !important;
+}
+
+.tree-card-trash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.tree-card-trash-btn:hover {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.tab-context-menu {
+  min-width: 210px;
+  z-index: 1100;
+}
+
 /* Dark theme overrides for Issue #6 */
 .app-container.theme-dark .forest-view-toggle {
   background-color: #111827;
   border-color: #334155;
 }
 
-.app-container.theme-dark .forest-view-toggle-btn {
+.app-container.theme-dark .forest-view-toggle .forest-view-toggle-btn {
   color: #94a3b8;
 }
 
-.app-container.theme-dark .forest-view-toggle-btn.active {
+.app-container.theme-dark .forest-view-toggle .forest-view-toggle-btn.active {
   background-color: #1e293b;
   color: #6ee7b7;
 }
@@ -6064,7 +6225,7 @@ body {
 
 .app-container.theme-dark .forest-graph-canvas-wrap {
   border-color: #334155;
-  background: radial-gradient(circle at 50% 45%, #0b241d 0%, #0f172a 70%, #020617 100%);
+  background: linear-gradient(180deg, #062118 0%, #0b1c24 55%, #020617 100%);
 }
 
 .app-container.theme-dark .forest-node-aura {
@@ -6112,4 +6273,159 @@ body {
   background-color: rgba(37, 99, 235, 0.18);
   border-color: rgba(96, 165, 250, 0.45);
   color: #93c5fd;
+}
+
+
+.forest-graph-inspector {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.app-container.theme-dark .forest-graph-shell.is-fullscreen {
+  background-color: #020617;
+}
+
+.app-container.theme-dark .forest-fullscreen-btn {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.app-container.theme-dark .forest-fullscreen-btn:hover {
+  background-color: #334155;
+}
+
+.app-container.theme-dark .forest-fullscreen-btn.active {
+  background-color: #059669;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.app-container.theme-dark .inspector-trash-btn {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+  border-color: rgba(248, 113, 113, 0.45) !important;
+  color: #fca5a5 !important;
+}
+
+.app-container.theme-dark .inspector-trash-btn:hover {
+  background-color: rgba(239, 68, 68, 0.24) !important;
+  border-color: rgba(248, 113, 113, 0.7) !important;
+  color: #fecaca !important;
+}
+
+.app-container.theme-dark .tree-card-trash-btn {
+  color: #64748b;
+}
+
+.app-container.theme-dark .tree-card-trash-btn:hover {
+  background-color: rgba(239, 68, 68, 0.18);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+.forest-scope-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  gap: 2px;
+}
+
+.forest-scope-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.forest-scope-btn.active {
+  background-color: #ffffff;
+  color: #047857;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.forest-active-folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 9px;
+  border-radius: 9999px;
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forest-active-folder-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(6, 95, 70, 0.1);
+  color: #065f46;
+  cursor: pointer;
+}
+
+.forest-active-folder-clear:hover {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+.inspector-scope-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.app-container.theme-dark .forest-scope-toggle {
+  background-color: #111827;
+  border-color: #334155;
+}
+
+.app-container.theme-dark .forest-scope-btn {
+  color: #94a3b8;
+}
+
+.app-container.theme-dark .forest-scope-btn.active {
+  background-color: #1e293b;
+  color: #6ee7b7;
+}
+
+.app-container.theme-dark .forest-active-folder-pill {
+  background-color: rgba(6, 78, 59, 0.45);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #a7f3d0;
+}
+
+.app-container.theme-dark .forest-active-folder-clear {
+  background: rgba(167, 243, 208, 0.15);
+  color: #a7f3d0;
+}
+
+.app-container.theme-dark .forest-active-folder-clear:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fecaca;
+}
+
+.app-container.theme-dark .inspector-scope-note {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
 }

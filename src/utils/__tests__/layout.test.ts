@@ -135,5 +135,70 @@ describe('layout: fluffy clouds & nested cloud distinction', () => {
     expect(lDescSide.length).toBeGreaterThan(0);
     expect(spanY(lParentSide)).toBeLessThan(spanY(lDescSide) * 0.75);
   });
+
+  it('reserves padding for expanded portal containers so sibling portals never overlap and keeps left portals left-aligned', () => {
+    const portalA = makeNode('portalA', 'Portal Entry A', [
+      makeNode('pa_1', 'A Child 1'),
+      makeNode('pa_2', 'A Child 2'),
+    ]);
+    const hostA: FreeMindNode = {
+      ...makeNode('hostA', 'Host A', [portalA]),
+      position: 'right',
+      link: './a.mm',
+    };
+
+    const portalB = makeNode('portalB', 'Portal Entry B', [
+      makeNode('pb_1', 'B Child 1'),
+      makeNode('pb_2', 'B Child 2'),
+    ]);
+    const hostB: FreeMindNode = {
+      ...makeNode('hostB', 'Host B', [portalB]),
+      position: 'right',
+      link: './b.mm',
+    };
+
+    const portalL = makeNode('portalL', 'Portal Entry Left', [makeNode('pl_1', 'L Child')]);
+    const hostLeft: FreeMindNode = {
+      ...makeNode('hostLeft', 'Host Left', [portalL]),
+      position: 'left',
+      link: './left.mm',
+    };
+
+    const root = makeNode('root', 'Root', [hostA, hostB, hostLeft]);
+    const portalEntryIds = new Set(['portalA', 'portalB', 'portalL']);
+    const { layoutNodes } = computeLayout(root, { portalEntryIds });
+
+    const getPortalBox = (ids: string[], side: 'left' | 'right') => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const id of ids) {
+        const l = layoutNodes.get(id)!;
+        minX = Math.min(minX, l.x - l.width / 2);
+        maxX = Math.max(maxX, l.x + l.width / 2);
+        minY = Math.min(minY, l.y - l.height / 2);
+        maxY = Math.max(maxY, l.y + l.height / 2);
+      }
+      const width = Math.max(240, maxX - minX + 32);
+      const x = side === 'left' ? maxX + 16 - width : minX - 16;
+      return {
+        x,
+        y: minY - 38,
+        width,
+        height: maxY - minY + 54,
+      };
+    };
+
+    const boxA = getPortalBox(['portalA', 'pa_1', 'pa_2'], 'right');
+    const boxB = getPortalBox(['portalB', 'pb_1', 'pb_2'], 'right');
+    // Strictly separated vertically including header badge & bottom padding
+    expect(boxB.y).toBeGreaterThan(boxA.y + boxA.height);
+
+    const lHostLeft = layoutNodes.get('hostLeft')!;
+    const boxL = getPortalBox(['portalL', 'pl_1'], 'left');
+    // Left-side portal container stays completely to the left of its host node
+    expect(boxL.x + boxL.width).toBeLessThan(lHostLeft.x - lHostLeft.width / 2);
+  });
 });
 

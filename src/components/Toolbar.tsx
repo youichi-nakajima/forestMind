@@ -24,12 +24,14 @@ import {
   Focus,
   Clock,
   X,
+  Network,
 } from 'lucide-react';
 import type { RecentFileEntry } from '../types/workspace';
 
 interface ToolbarProps {
   isForestViewOpen?: boolean;
   onCloseForestView?: () => void;
+  onOpenRelatedOverview?: () => void;
   onNewTab?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: () => void;
@@ -85,6 +87,7 @@ function formatParentDir(filePath: string): string {
 export const Toolbar: React.FC<ToolbarProps> = ({
   isForestViewOpen = false,
   onCloseForestView,
+  onOpenRelatedOverview,
   onNewTab,
   isDarkMode = false,
   onToggleTheme,
@@ -563,6 +566,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           >
             <PlayCircle size={15} className="presentation-btn-icon" />
             <span>思考再生 (F5)</span>
+          </button>
+        </div>
+      )}
+
+      {!isForestViewOpen && onOpenRelatedOverview && (
+        <div className="toolbar-group">
+          <button
+            type="button"
+            className="toolbar-btn related-overview-btn"
+            title="このマップとリンクでつながるマップだけを俯瞰表示"
+            onClick={onOpenRelatedOverview}
+          >
+            <Network size={15} />
+            <span>関連俯瞰</span>
           </button>
         </div>
       )}

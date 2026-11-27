@@ -10,6 +10,7 @@ interface ScannedMmFile {
   relativePath: string;
   xmlContent: string;
   fileSize: number;
+  modifiedTimeMs?: number;
 }
 
 interface ScanFolderResult {
@@ -68,6 +69,7 @@ describe('electron folderScanner', () => {
       relativePath: '.',
       xmlContent: '<map version="1.0.1"><node ID="1" TEXT="Root"/></map>',
       fileSize: Buffer.byteLength('<map version="1.0.1"><node ID="1" TEXT="Root"/></map>', 'utf8'),
+      modifiedTimeMs: expect.any(Number),
     });
     expect(byName.get('Project.MM')).toEqual({
       filePath: deepMm,
@@ -75,7 +77,9 @@ describe('electron folderScanner', () => {
       relativePath: 'sub/deep',
       xmlContent: '<map version="1.0.1"><node ID="2" TEXT="Deep"/></map>',
       fileSize: Buffer.byteLength('<map version="1.0.1"><node ID="2" TEXT="Deep"/></map>', 'utf8'),
+      modifiedTimeMs: expect.any(Number),
     });
+    expect(byName.get('root-map.mm')?.modifiedTimeMs).toBeGreaterThan(0);
   });
 
   it('skips symbolic links safely if symlinks are supported', async () => {

@@ -379,6 +379,62 @@ export function useMindMap() {
     }
   }, [tabs, activeTabId]);
 
+  const removeTabsByFilePath = useCallback((filePath: string): string[] => {
+    const targetKey = filePath.replace(/\\/g, '/').toLowerCase();
+    const currentTabs = tabsRef.current;
+    const removedIds = currentTabs
+      .filter(t => t.filePath && t.filePath.replace(/\\/g, '/').toLowerCase() === targetKey)
+      .map(t => t.id);
+
+    if (removedIds.length === 0) {
+      return [];
+    }
+
+    const removedSet = new Set(removedIds);
+    const remaining = currentTabs.filter(t => !removedSet.has(t.id));
+
+    pendingNewNodeRef.current = null;
+    lastPropEditRef.current = null;
+    setEditingNodeIdRaw(null);
+
+    if (remaining.length === 0) {
+      const freshId = `tab_${Date.now()}_${++tabIdCounter}`;
+      const freshTab: MapTab = {
+        id: freshId,
+        title: '新規マインドマップ',
+        map: {
+          version: '1.0.1',
+          root: {
+            id: generateNodeId(),
+            text: '新規マインドマップ',
+            style: 'bubble',
+            font: { size: 16, bold: true },
+            icons: [],
+            attributes: [],
+            arrowLinks: [],
+            hooks: [],
+            children: [],
+          },
+        },
+        past: [],
+        future: [],
+        selectedNodeId: null,
+        isDirty: false,
+        savedPastLength: 0,
+      };
+      freshTab.selectedNodeId = freshTab.map.root.id;
+      setTabs([freshTab]);
+      setActiveTabId(freshId);
+      return removedIds;
+    }
+
+    setTabs(remaining);
+    if (removedSet.has(activeTabIdRef.current)) {
+      setActiveTabId(remaining[0].id);
+    }
+    return removedIds;
+  }, []);
+
   const togglePinTab = useCallback((tabId: string) => {
     setTabs(prev => toggleTabPinnedInList(prev, tabId));
   }, []);
@@ -1422,6 +1478,7 @@ export function useMindMap() {
     openFileInTab,
     reconcileTabWithDisk,
     closeTab,
+    removeTabsByFilePath,
     togglePinTab,
     reorderTabs,
     map,
